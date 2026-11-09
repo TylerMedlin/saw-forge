@@ -1,0 +1,28 @@
+name: Feature idea
+description: Suggest something new or better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: The music you're making or the task you're doing, and where Saw Forge gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you'd like it to work. Sketches and examples from other apps are welcome.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Saw Forge synth
+        - Worship Atmospheres / Live Pad Mode
+        - Drummer
+        - Recording and editing
+        - Mixing and effects
+        - Saw Forge Hub
+        - Something else

@@ -38,8 +38,13 @@ jobs:
           v=$(node -p "require('./desktop/package.json').version")
           [ "v$v" = "$TAG" ] || { echo "Tag $TAG does not match desktop/package.json version $v"; exit 1; }
       - name: Create the draft release
-        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
-        run: gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft --title "Saw Forge Hub ${TAG#v}" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNED_WINDOWS: ${{ secrets.WIN_CSC_LINK != '' }}
+          SIGNED_MAC: ${{ secrets.MAC_CSC_LINK != '' && secrets.APPLE_TEAM_ID != '' }}
+        run: |
+          node desktop/scripts/release-notes.mjs > notes.md
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft --title "Saw Forge Hub ${TAG#v}" --notes-file notes.md --generate-notes
 
   apps:
     needs: draft

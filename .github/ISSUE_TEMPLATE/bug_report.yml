@@ -1,0 +1,58 @@
+name: Bug report
+description: Something doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report this! The more detail, the faster it gets fixed.
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which part?
+      options:
+        - Saw Forge Studio
+        - Saw Forge Hub (installing, updating, launching)
+        - Installer (Windows setup or macOS disk image)
+        - Download website
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: In Saw Forge Hub, open About. For Studio, the version is on its card in the hub.
+      placeholder: e.g. Hub 1.0.0, Studio 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS 15 Sequoia or later
+        - macOS 12–14
+        - Browser (running from source)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Click …
+        3. See …
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots, audio or project file
+      description: Drag files here. A small .sfproj that shows the problem helps a lot.

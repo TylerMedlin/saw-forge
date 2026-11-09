@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Install help
+    url: https://tylermedlin.github.io/saw-forge/install.html
+    about: Step-by-step install guide for Windows and macOS, including first-launch prompts.
+  - name: Report a security problem
+    url: https://github.com/TylerMedlin/saw-forge/security/advisories/new
+    about: Please report vulnerabilities privately, not as a public issue.
