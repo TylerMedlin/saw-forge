@@ -319,6 +319,7 @@ else {
     if (CAPTURE) return capture();
     const id = argLaunch(process.argv);
     if (id && manager.installed(id)) launchApp(id); else openHub();
+    manager.repairShortcuts();
     manager.refresh().catch(() => {});
     setTimeout(() => checkHubUpdate(false), 4000);
     setInterval(() => { manager.refresh().catch(() => {}); checkHubUpdate(false); }, 6 * 3600 * 1000);

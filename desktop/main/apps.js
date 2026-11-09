@@ -195,8 +195,15 @@ class AppManager {
     const icon = path.join(rec.path, '.sawforge', 'icon.ico');
     const opts = { target: process.execPath, args: `--launch ${id}`, description: m.tagline || m.name, icon: fs.existsSync(icon) ? icon : process.execPath, iconIndex: 0, appUserModelId: `${CONFIG.appId}.${id}` };
     const p = this.shortcutPaths(id);
-    try { fs.mkdirSync(path.dirname(p.startMenu), { recursive: true }); shell.writeShortcutLink(p.startMenu, 'replace', opts); } catch { /* best effort */ }
-    if (fresh ? this.state.settings.desktopShortcuts : fs.existsSync(p.desktop)) { try { shell.writeShortcutLink(p.desktop, 'replace', opts); } catch { /* best effort */ } }
+    // 'create' writes or overwrites; ('replace' only works on a shortcut that already exists)
+    try { fs.mkdirSync(path.dirname(p.startMenu), { recursive: true }); shell.writeShortcutLink(p.startMenu, 'create', opts); } catch { /* best effort */ }
+    if (fresh ? this.state.settings.desktopShortcuts : fs.existsSync(p.desktop)) { try { shell.writeShortcutLink(p.desktop, 'create', opts); } catch { /* best effort */ } }
+  }
+  // At startup: every installed app gets its Start-menu shortcut back if it went missing
+  // (desktop shortcuts are left alone: someone may have removed theirs on purpose).
+  repairShortcuts() {
+    if (process.platform !== 'win32' || !app.isPackaged || process.env.SAWFORGE_SELFTEST) return;
+    for (const id of Object.keys(this.state.installed)) if (!fs.existsSync(this.shortcutPaths(id).startMenu)) this.makeShortcuts(id, false);
   }
   removeShortcuts(id) {
     if (process.platform !== 'win32') return;
