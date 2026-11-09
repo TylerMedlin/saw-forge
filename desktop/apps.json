@@ -1,23 +1,40 @@
 {
   "_comment": "Apps the hub offers. pack-apps zips each one into a verified package and writes the catalog.",
+  "hubNotes": "Installing an app now adds its Start menu shortcut (and a desktop shortcut, if turned on in Settings). On startup the hub also restores missing Start menu shortcuts, which fixes existing 1.0.0 installs.",
   "apps": [
     {
       "id": "saw-forge-studio",
       "name": "Saw Forge Studio",
       "version": "1.0.0",
+      "releasedWith": "1.0.0",
       "tagline": "Music production studio",
       "description": "Arrange, record and mix with the Saw Forge wavetable synth, Worship Atmospheres pads, virtual EDM drummers, take comping and automation.",
       "category": "Music production",
       "root": "..",
-      "include": ["index.html", "src", "styles", "LICENSE", "README.md"],
+      "include": [
+        "index.html",
+        "src",
+        "styles",
+        "LICENSE"
+      ],
       "icon": "assets/apps/saw-forge-studio/icon.png",
       "iconIco": "assets/apps/saw-forge-studio/icon.ico",
-      "window": { "width": 1480, "height": 920, "minWidth": 1100, "minHeight": 680, "backgroundColor": "#121417" },
+      "window": {
+        "width": 1480,
+        "height": 920,
+        "minWidth": 1100,
+        "minHeight": 680,
+        "backgroundColor": "#121417"
+      },
       "dataFolder": "Saw Forge Studio",
       "notes": "First desktop release: Saw Forge synth, Worship Atmospheres with Live Pad Mode and setlists, Drummer, recording with take lanes and comping, automation, WAV export."
     }
   ],
   "comingSoon": [
-    { "name": "More Saw Forge apps", "tagline": "On the way", "description": "New instruments and tools will appear here and install with one click." }
+    {
+      "name": "More Saw Forge apps",
+      "tagline": "On the way",
+      "description": "New instruments and tools will appear here and install with one click."
+    }
   ]
 }

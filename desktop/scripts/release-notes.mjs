@@ -10,14 +10,19 @@ import { fileURLToPath } from 'node:url';
 const DESKTOP = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(readFileSync(join(DESKTOP, 'package.json'), 'utf8'));
 const cfg = JSON.parse(readFileSync(join(DESKTOP, 'sawforge.config.json'), 'utf8'));
-const { apps } = JSON.parse(readFileSync(join(DESKTOP, 'apps.json'), 'utf8'));
+const { apps, hubNotes } = JSON.parse(readFileSync(join(DESKTOP, 'apps.json'), 'utf8'));
 const v = pkg.version, site = `https://${cfg.githubOwner.toLowerCase()}.github.io/${cfg.githubRepo}/`;
 const signed = { win: process.env.SIGNED_WINDOWS === 'true', mac: process.env.SIGNED_MAC === 'true' };
 
 const out = [];
 out.push(`**Saw Forge Hub ${v}** installs, updates and opens the Saw Forge apps on Windows and macOS. Free and open source (GPL-3.0).`, '');
 out.push(`### What's new`, '');
-for (const a of apps) out.push(`- **${a.name} ${a.version}:** ${a.notes || 'Improvements and fixes.'}`);
+if (hubNotes) out.push(`- **Saw Forge Hub ${v}:** ${hubNotes}`);
+// an app whose version first shipped with an earlier hub release is listed as unchanged
+for (const a of apps) {
+  if (a.releasedWith && a.releasedWith !== v) out.push(`- **${a.name} ${a.version}:** unchanged.`);
+  else out.push(`- **${a.name} ${a.version}:** ${a.notes || 'Improvements and fixes.'}`);
+}
 out.push('', '### Download', '');
 out.push('| Your computer | File |', '|---|---|');
 out.push(`| Windows 10 / 11 (64-bit) | \`SawForgeHub-Setup-${v}-win-x64.exe\` |`);
