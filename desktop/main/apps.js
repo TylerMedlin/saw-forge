@@ -189,26 +189,50 @@ class AppManager {
     const startMenu = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Saw Forge');
     return { startMenu: path.join(startMenu, `${m.name}.lnk`), desktop: path.join(app.getPath('desktop'), `${m.name}.lnk`) };
   }
-  makeShortcuts(id, fresh) {
-    if (process.platform !== 'win32' || !app.isPackaged || process.env.SAWFORGE_SELFTEST) return;
+  shortcutsEnabled() { return process.platform === 'win32' && app.isPackaged && !process.env.SAWFORGE_SELFTEST; }
+  writeShortcut(id, file) {
     const rec = this.installed(id), m = this.manifest(id) || {};
     const icon = path.join(rec.path, '.sawforge', 'icon.ico');
     const opts = { target: process.execPath, args: `--launch ${id}`, description: m.tagline || m.name, icon: fs.existsSync(icon) ? icon : process.execPath, iconIndex: 0, appUserModelId: `${CONFIG.appId}.${id}` };
-    const p = this.shortcutPaths(id);
-    // 'create' writes or overwrites; ('replace' only works on a shortcut that already exists)
-    try { fs.mkdirSync(path.dirname(p.startMenu), { recursive: true }); shell.writeShortcutLink(p.startMenu, 'create', opts); } catch { /* best effort */ }
-    if (fresh ? this.state.settings.desktopShortcuts : fs.existsSync(p.desktop)) { try { shell.writeShortcutLink(p.desktop, 'create', opts); } catch { /* best effort */ } }
+    // 'create' writes or overwrites ('replace' only works on a shortcut that already exists)
+    try { fs.mkdirSync(path.dirname(file), { recursive: true }); return shell.writeShortcutLink(file, 'create', opts); } catch { return false; }
   }
-  // At startup: every installed app gets its Start-menu shortcut back if it went missing
-  // (desktop shortcuts are left alone: someone may have removed theirs on purpose).
+  // fresh: first install of the app (a desktop shortcut follows the setting); otherwise keep what exists
+  makeShortcuts(id, fresh) {
+    if (!this.shortcutsEnabled()) return;
+    const p = this.shortcutPaths(id);
+    this.writeShortcut(id, p.startMenu);
+    if (fresh ? this.state.settings.desktopShortcuts : fs.existsSync(p.desktop)) { if (this.writeShortcut(id, p.desktop)) this.trackDesktop(id, true); }
+  }
+  trackDesktop(id, on) {
+    const t = this.state.desktopLinks || (this.state.desktopLinks = {});
+    if (on) t[id] = true; else delete t[id];
+    this.save();
+  }
+  // At startup: every installed app gets its Start-menu shortcut back if it went missing.
+  // Desktop shortcuts the hub made come back only right after a hub update (an update must
+  // never cost anyone their shortcuts); if one disappears at any other time, someone removed
+  // it on purpose and the hub stops tracking it.
   repairShortcuts() {
-    if (process.platform !== 'win32' || !app.isPackaged || process.env.SAWFORGE_SELFTEST) return;
-    for (const id of Object.keys(this.state.installed)) if (!fs.existsSync(this.shortcutPaths(id).startMenu)) this.makeShortcuts(id, false);
+    if (!this.shortcutsEnabled()) return;
+    const version = app.getVersion(), updated = !!this.state.lastHubVersion && this.state.lastHubVersion !== version;
+    const links = this.state.desktopLinks || (this.state.desktopLinks = {});
+    for (const id of Object.keys(this.state.installed)) {
+      const p = this.shortcutPaths(id);
+      if (!fs.existsSync(p.startMenu)) this.writeShortcut(id, p.startMenu);
+      const onDesktop = fs.existsSync(p.desktop);
+      if (onDesktop) links[id] = true;                         // adopt shortcuts that exist
+      else if (links[id] && updated) this.writeShortcut(id, p.desktop);
+      else if (links[id]) delete links[id];
+    }
+    this.state.lastHubVersion = version;
+    this.save();
   }
   removeShortcuts(id) {
     if (process.platform !== 'win32') return;
     const p = this.shortcutPaths(id);
     for (const f of [p.startMenu, p.desktop]) { try { fs.rmSync(f, { force: true }); } catch { /* ignore */ } }
+    if (this.state.desktopLinks && this.state.desktopLinks[id]) { delete this.state.desktopLinks[id]; this.save(); }
   }
 
   // ------------------------------------------------------------ what the hub window shows

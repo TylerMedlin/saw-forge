@@ -215,7 +215,8 @@ function setupIpc() {
   }));
   ipcMain.handle('hub:hubUpdate', onlyHub((action) => {
     if (action === 'check') checkHubUpdate(true);
-    else if (action === 'install' && getUpdater() && hubUpdate.status === 'ready') getUpdater().quitAndInstall();
+    // silent install, then reopen the hub: no setup wizard pages in the middle of an update
+    else if (action === 'install' && getUpdater() && hubUpdate.status === 'ready') getUpdater().quitAndInstall(true, true);
     return hubUpdate;
   }));
 }
