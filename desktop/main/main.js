@@ -32,7 +32,7 @@ if (ISOLATED) {
   process.env.SAWFORGE_SELFTEST = '1';
   app.setPath('userData', path.join(SELFTEST_DIR, 'userData'));
 }
-app.setName('Saw Forge Hub');
+app.setName(require('../package.json').productName || 'Saw Forge Hub'); // settings folder and single-instance lock follow the product name
 if (process.platform === 'win32') app.setAppUserModelId(CONFIG.appId);
 nativeTheme.themeSource = 'dark';
 

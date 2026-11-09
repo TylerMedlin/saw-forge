@@ -39,7 +39,7 @@ class AppManager {
   constructor({ onChange, onProgress, paths = {} } = {}) {
     this.onChange = onChange || (() => {});
     this.onProgress = onProgress || (() => {});
-    const local = process.platform === 'win32' && process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Saw Forge Hub') : app.getPath('userData');
+    const local = process.platform === 'win32' && process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, app.getName()) : app.getPath('userData');
     this.appsDir = paths.apps || path.join(local, 'apps');
     this.stateFile = paths.state || path.join(app.getPath('userData'), 'hub-state.json');
     this.docsDir = paths.documents || path.join(app.getPath('documents'), 'Saw Forge');
