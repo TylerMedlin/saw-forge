@@ -1,6 +1,6 @@
 {
   "_comment": "Apps the hub offers. pack-apps zips each one into a verified package and writes the catalog.",
-  "hubNotes": "Installing an app now adds its Start menu shortcut (and a desktop shortcut, if turned on in Settings). On startup the hub also restores missing Start menu shortcuts, which fixes existing 1.0.0 installs.",
+  "hubNotes": "Updates now install silently and reopen the hub, with no setup wizard in the middle. App shortcuts are kept through updates, and desktop shortcuts the hub created come back automatically after an update. Updating from 1.0.0 or 1.0.1 shows the setup wizard one last time: click Next through it.",
   "apps": [
     {
       "id": "saw-forge-studio",
