@@ -1,7 +1,7 @@
 {
   "name": "saw-forge-hub",
   "productName": "Saw Forge Hub",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Install, update and launch Saw Forge apps — free, open-source music software.",
   "author": "Saw Forge",
   "license": "GPL-3.0-or-later",
