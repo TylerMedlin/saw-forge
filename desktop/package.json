@@ -1,0 +1,38 @@
+{
+  "name": "saw-forge-hub",
+  "productName": "Saw Forge Hub",
+  "version": "1.0.0",
+  "description": "Install, update and launch Saw Forge apps — free, open-source music software.",
+  "author": "Saw Forge",
+  "license": "GPL-3.0-or-later",
+  "private": true,
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "selftest": "electron . --selftest",
+    "assets": "node scripts/make-assets.mjs",
+    "pack-apps": "node scripts/pack-apps.mjs",
+    "dist:win": "npm run pack-apps && electron-builder --config electron-builder.config.cjs --win --publish never",
+    "dist:mac": "npm run pack-apps && electron-builder --config electron-builder.config.cjs --mac --publish never",
+    "release:win": "npm run pack-apps && electron-builder --config electron-builder.config.cjs --win --publish always",
+    "release:mac": "npm run pack-apps && electron-builder --config electron-builder.config.cjs --mac --publish always"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "allowScripts": {
+    "electron@45.2.3": true
+  },
+  "homepage": "https://tylermedlin.github.io/saw-forge/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TylerMedlin/saw-forge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TylerMedlin/saw-forge/issues"
+  }
+}

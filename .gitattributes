@@ -1,0 +1,9 @@
+# Normalize text files to LF in the repository; keep binaries untouched.
+* text=auto
+*.nsh text eol=crlf
+*.png binary
+*.ico binary
+*.bmp binary
+*.zip binary
+*.sfproj binary
+*.wav binary

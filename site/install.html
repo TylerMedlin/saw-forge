@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Install guide — Saw Forge</title>
+<meta name="description" content="Step-by-step instructions for installing Saw Forge Hub and Saw Forge Studio on Windows and macOS.">
+<link rel="icon" href="img/favicon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-head">
+  <div class="wrap">
+    <a class="logo" href="./"><img src="img/hub-icon.png" alt="">Saw Forge</a>
+    <nav class="nav">
+      <a href="./#studio">Saw Forge Studio</a>
+      <a href="./#download">Download</a>
+      <a href="install.html">Install guide</a>
+      <a href="./#safety">Is it safe?</a>
+      <a class="gh" data-link="repo" href="#">Source</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap" style="padding-top:56px;padding-bottom:80px">
+  <span class="eyebrow">Install guide</span>
+  <h1 style="font-size:clamp(32px,4.4vw,46px);letter-spacing:-.02em;margin:10px 0 12px">Installing Saw Forge</h1>
+  <p class="section-lead">Every screen you'll see, from download to making music, in about two minutes.</p>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="windows" class="on">Windows</button>
+    <button role="tab" data-tab="mac">macOS</button>
+  </div>
+
+  <!-- ------------------------------------------------------------ Windows -->
+  <div class="guide on" id="windows" role="tabpanel">
+    <div class="gstep"><div class="n">1</div><div>
+      <h3>Download the installer</h3>
+      <p>Get <code data-file="windows">SawForgeHub-Setup-win-x64.exe</code> from the <a href="./#download">download page</a>. It's a single setup file for Windows 10 and 11 (64-bit).</p>
+      <p><a class="btn small" data-dl="windows" href="#">Download for Windows</a></p>
+    </div></div>
+
+    <div class="gstep"><div class="n">2</div><div>
+      <h3>Open the installer</h3>
+      <p>Open the file from your browser's downloads, or from the Downloads folder.</p>
+      <div class="note" data-unsigned="windows"><b>If you see “Windows protected your PC”:</b> click <span class="ui">More info</span>, check that the publisher reads “Unknown publisher” and the file name matches, then click <span class="ui">Run anyway</span>. This is Microsoft SmartScreen; it appears for new apps that aren't code-signed yet. To check the file first, <a href="./#safety">verify its checksum</a>.</div>
+      <p>Windows then asks if you want to allow the app to make changes only if you choose to install for all users in the next step.</p>
+    </div></div>
+
+    <div class="gstep"><div class="n">3</div><div>
+      <h3>Go through the setup wizard</h3>
+      <div class="wizard">
+        <div><b>Welcome</b>Saw Forge Hub Setup. Click Next.</div>
+        <div><b>License Agreement</b>The GNU GPL v3, which explains your freedom to use, share and change the software. Click I Agree.</div>
+        <div><b>Installation options</b>Choose <i>Only for me</i> (recommended, no admin rights) or <i>Anyone who uses this computer</i>.</div>
+        <div><b>Install location</b>The default is fine: <code>%LOCALAPPDATA%\Programs\Saw Forge Hub</code> (or <code>Program Files</code> when installing for everyone).</div>
+        <div><b>Installing</b>Copies the files; takes a few seconds.</div>
+        <div><b>Finish</b>Leave <i>Run Saw Forge Hub</i> checked and click Finish.</div>
+      </div>
+      <p>You also get a desktop shortcut and <span class="ui">Start → Saw Forge → Saw Forge Hub</span>.</p>
+    </div></div>
+
+    <div class="gstep"><div class="n">4</div><div>
+      <h3>Install Saw Forge Studio from the hub</h3>
+      <p>In Saw Forge Hub, click <span class="ui">Install</span> next to Saw Forge Studio. The hub downloads the app, checks it against its published checksum, and installs it. When it finishes, click <span class="ui">Open</span>.</p>
+      <p>Saw Forge Studio also gets its own shortcut under <span class="ui">Start → Saw Forge</span> (and on the desktop, which you can turn off in the hub's Settings).</p>
+    </div></div>
+
+    <div class="gstep"><div class="n">5</div><div>
+      <h3>Start making music</h3>
+      <ul>
+        <li>Click <span class="ui">Demo session</span> on the welcome screen to hear what's possible, or <span class="ui">New project</span> to start fresh.</li>
+        <li>Projects save to <code>Documents\Saw Forge\Saw Forge Studio</code>. <kbd>Ctrl</kbd>+<kbd>S</kbd> saves, and work is autosaved every few seconds.</li>
+        <li>The first time you record, Windows may ask for microphone access. Allow it under <span class="ui">Settings → Privacy &amp; security → Microphone</span>.</li>
+      </ul>
+    </div></div>
+
+    <div class="gstep"><div class="n">?</div><div>
+      <h3>Updating and uninstalling</h3>
+      <ul>
+        <li>Updates appear in the hub under <span class="ui">Updates</span>. The hub updates itself and asks you to restart.</li>
+        <li>To remove one app, use <span class="ui">⋯ → Uninstall</span> in the hub.</li>
+        <li>To remove everything, go to <span class="ui">Settings → Apps → Installed apps → Saw Forge Hub → Uninstall</span>. This removes the hub, its apps and their shortcuts. Your projects in Documents are kept.</li>
+      </ul>
+    </div></div>
+  </div>
+
+  <!-- ------------------------------------------------------------ macOS -->
+  <div class="guide" id="mac" role="tabpanel">
+    <div class="gstep"><div class="n">1</div><div>
+      <h3>Download the disk image</h3>
+      <p>Get <code data-file="mac">SawForgeHub-mac-universal.dmg</code> from the <a href="./#download">download page</a>. One download works on Apple Silicon (M1 and later) and Intel Macs running macOS 12 Monterey or later.</p>
+      <p><a class="btn small" data-dl="mac" href="#">Download for macOS</a></p>
+    </div></div>
+
+    <div class="gstep"><div class="n">2</div><div>
+      <h3>Drag Saw Forge Hub into Applications</h3>
+      <p>Double-click the downloaded <code>.dmg</code>. In the window that opens, drag the <span class="ui">Saw Forge Hub</span> icon onto the <span class="ui">Applications</span> folder. Then eject the disk image (the ⏏ button in Finder's sidebar).</p>
+    </div></div>
+
+    <div class="gstep"><div class="n">3</div><div>
+      <h3>Open it the first time</h3>
+      <p>Open <span class="ui">Saw Forge Hub</span> from Applications or Launchpad.</p>
+      <div class="note" data-unsigned="mac"><b>If macOS says it can't verify the app:</b> early releases aren't notarized by Apple yet, so the first launch needs one extra approval.
+        <ul>
+          <li><b>macOS 15 Sequoia and later:</b> click <span class="ui">Done</span>, open <span class="ui">System Settings → Privacy &amp; Security</span>, scroll to <i>Security</i>, click <span class="ui">Open Anyway</span> next to “Saw Forge Hub was blocked”, and confirm with your password.</li>
+          <li><b>macOS 12–14:</b> Control-click (or right-click) Saw Forge Hub in Applications, choose <span class="ui">Open</span>, then click <span class="ui">Open</span> again.</li>
+        </ul>
+        You only need to do this once. To check the file first, <a href="./#safety">verify its checksum</a>.</div>
+    </div></div>
+
+    <div class="gstep"><div class="n">4</div><div>
+      <h3>Install Saw Forge Studio from the hub</h3>
+      <p>Click <span class="ui">Install</span> next to Saw Forge Studio. The hub downloads it, checks its checksum and installs it. Then click <span class="ui">Open</span>. Keep Saw Forge Hub in the Dock to reach your apps quickly.</p>
+    </div></div>
+
+    <div class="gstep"><div class="n">5</div><div>
+      <h3>Start making music</h3>
+      <ul>
+        <li>Click <span class="ui">Demo session</span> on the welcome screen to hear what's possible, or <span class="ui">New project</span> to start fresh.</li>
+        <li>Projects save to <code>Documents/Saw Forge/Saw Forge Studio</code>. <kbd>⌘</kbd>+<kbd>S</kbd> saves, and work is autosaved every few seconds.</li>
+        <li>The first time you record, macOS asks for microphone access. Click <span class="ui">Allow</span>, or change it later in <span class="ui">System Settings → Privacy &amp; Security → Microphone</span>.</li>
+      </ul>
+    </div></div>
+
+    <div class="gstep"><div class="n">?</div><div>
+      <h3>Updating and uninstalling</h3>
+      <ul>
+        <li>Updates appear in the hub under <span class="ui">Updates</span>. Once releases are signed, the hub also updates itself; until then, download new hub versions from this site.</li>
+        <li>To remove one app, use <span class="ui">⋯ → Uninstall</span> in the hub.</li>
+        <li>To remove everything, uninstall the apps in the hub, quit it, and drag <span class="ui">Saw Forge Hub</span> from Applications to the Trash. Settings live in <code>~/Library/Application Support/Saw Forge Hub</code>. Your projects in Documents are kept.</li>
+      </ul>
+    </div></div>
+  </div>
+
+  <div class="panel" style="margin-top:40px">
+    <h3>Something didn't work?</h3>
+    <p>Please <a data-link="issues" href="#">open an issue on GitHub</a> with your operating system version and what you saw. Screenshots help.</p>
+  </div>
+</main>
+
+<footer class="site-foot">
+  <div class="wrap">
+    <div class="legal">© <span data-year></span> Saw Forge. Saw Forge is free software under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL v3 or later</a> and comes with ABSOLUTELY NO WARRANTY.</div>
+    <nav><a data-link="repo" href="#">Source code</a><a data-link="releases" href="#">All releases</a><a href="./">Home</a><a data-link="issues" href="#">Report a problem</a></nav>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

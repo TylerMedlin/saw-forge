@@ -1,0 +1,7 @@
+{
+  "_comment": "One place for names and addresses. Set githubOwner to your GitHub username; everything else follows.",
+  "publisher": "Saw Forge",
+  "githubOwner": "TylerMedlin",
+  "githubRepo": "saw-forge",
+  "appId": "com.sawforge.hub"
+}

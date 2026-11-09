@@ -1,0 +1,124 @@
+# Builds and publishes a release when you push a tag like v1.0.0
+# (the tag must match desktop/package.json "version").
+#
+#   1. draft    creates a draft GitHub release for the tag
+#   2. apps     packs every app (reproducible zips) and attaches them
+#   3. build    Windows installer (on Windows) and macOS disk image (on a Mac), attached by electron-builder
+#   4. publish  adds SHA256SUMS.txt, publishes the release, and deploys the download site + app catalog to GitHub Pages
+#
+# Code signing switches on when these repository secrets exist (all optional):
+#   WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD                      Windows certificate (.pfx, base64) and password
+#   MAC_CSC_LINK, MAC_CSC_KEY_PASSWORD                      Apple "Developer ID Application" certificate (.p12, base64)
+#   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID    Apple notarization
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.ref_name }}
+  NODE_VERSION: '24'
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag matches the hub version
+        run: |
+          v=$(node -p "require('./desktop/package.json').version")
+          [ "v$v" = "$TAG" ] || { echo "Tag $TAG does not match desktop/package.json version $v"; exit 1; }
+      - name: Create the draft release
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --draft --title "Saw Forge Hub ${TAG#v}" --generate-notes
+
+  apps:
+    needs: draft
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: desktop } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+      - run: node scripts/pack-apps.mjs
+      - name: Attach app packages
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh release upload "$TAG" dist-apps/*.zip --clobber
+      - uses: actions/upload-artifact@v4
+        with: { name: dist-apps, path: desktop/dist-apps }
+
+  build:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults: { run: { working-directory: desktop } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: npm, cache-dependency-path: desktop/package-lock.json }
+      - run: npm ci
+      - name: Self-test (installs and boots every app)
+        run: npm run pack-apps && npx electron . --selftest
+      - name: Windows installer
+        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npm run release:win
+      - name: macOS disk image
+        if: runner.os == 'macOS'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run release:mac
+
+  publish:
+    needs: [apps, build]
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}' }
+      - uses: actions/download-artifact@v4
+        with: { name: dist-apps, path: dist-apps }
+      - name: Checksums for every file in the release
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: |
+          mkdir assets && gh release download "$TAG" -D assets
+          (cd assets && rm -f SHA256SUMS.txt && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          gh release upload "$TAG" assets/SHA256SUMS.txt --clobber
+      - name: Publish the release
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: gh release edit "$TAG" --draft=false --latest
+      - name: Build the download site
+        env:
+          SIGNED_WINDOWS: ${{ secrets.WIN_CSC_LINK != '' }}
+          SIGNED_MAC: ${{ secrets.MAC_CSC_LINK != '' && secrets.APPLE_TEAM_ID != '' }}
+        run: |
+          mkdir -p _site && cp -r site/. _site/
+          cp dist-apps/catalog.json _site/catalog.json
+          node desktop/scripts/site-data.mjs assets _site/latest.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+      - id: deploy
+        uses: actions/deploy-pages@v4
