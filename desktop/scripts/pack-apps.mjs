@@ -20,6 +20,10 @@ const cfg = JSON.parse(readFileSync(join(DESKTOP, 'sawforge.config.json'), 'utf8
 const pkg = JSON.parse(readFileSync(join(DESKTOP, 'package.json'), 'utf8'));
 const { apps, comingSoon } = JSON.parse(readFileSync(join(DESKTOP, 'apps.json'), 'utf8'));
 const SKIP = /(^|[\\/])(\.git|node_modules|saves|exports|\.DS_Store|Thumbs\.db)([\\/]|$)/;
+// Text files go in with LF line endings whatever the checkout uses (Windows Git
+// often writes CRLF), so every machine builds a byte-identical package.
+const TEXT = /\.(js|mjs|cjs|css|html|md|json|txt|svg)$|(^|\/)LICENSE$/;
+const read = (full, name) => { const b = readFileSync(full); return TEXT.test(name) ? Buffer.from(b.toString('utf8').replace(/\r\n/g, '\n'), 'utf8') : b; };
 
 function walk(dir, base, out) {
   for (const name of readdirSync(dir).sort()) {
@@ -27,7 +31,7 @@ function walk(dir, base, out) {
     if (SKIP.test(full)) continue;
     const st = statSync(full);
     if (st.isDirectory()) walk(full, base, out);
-    else out.push({ name: relative(base, full).split(sep).join('/'), data: readFileSync(full) });
+    else { const rel = relative(base, full).split(sep).join('/'); out.push({ name: rel, data: read(full, rel) }); }
   }
 }
 
@@ -42,7 +46,7 @@ for (const a of apps) {
   for (const inc of a.include) {
     const p = join(root, inc);
     if (!existsSync(p)) throw new Error(`${a.id}: missing ${inc}`);
-    if (statSync(p).isDirectory()) walk(p, root, files); else files.push({ name: inc, data: readFileSync(p) });
+    if (statSync(p).isDirectory()) walk(p, root, files); else files.push({ name: inc, data: read(p, inc) });
   }
   const manifest = { id: a.id, name: a.name, version: a.version, tagline: a.tagline, entry: 'index.html', window: a.window, dataFolder: a.dataFolder || a.name, license: 'GPL-3.0-or-later', publisher: cfg.publisher };
   files.push({ name: '.sawforge/app.json', data: Buffer.from(JSON.stringify(manifest, null, 2)) });
