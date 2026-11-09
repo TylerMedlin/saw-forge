@@ -12,9 +12,11 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 
 /* top bar */
 .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid var(--line); background: linear-gradient(#16191c, #131619); }
-.brand { display: flex; align-items: center; gap: 9px; width: 184px; }
+.brand { display: flex; align-items: center; gap: 8px; flex: none; min-width: 184px; white-space: nowrap; }
 .brand b { font-size: 15px; letter-spacing: .01em; }
 .brand span { font-size: 15px; color: var(--text-3); font-weight: 400; }
+.brand .brand-ver { font-size: 10.5px; margin-left: -2px; padding: 1px 5px; border-radius: 8px; background: var(--bg-3); color: var(--text-2); }
+.brand .brand-ver:empty { display: none; }
 .search { flex: 1; max-width: 460px; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 17px; background: var(--bg-2); border: 1px solid var(--line); color: var(--text-3); }
 .search:focus-within { border-color: #4a525b; }
 .search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }

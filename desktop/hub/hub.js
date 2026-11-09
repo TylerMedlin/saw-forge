@@ -89,18 +89,19 @@ function statusPill(a) {
 }
 
 // ------------------------------------------------------------ views
+const short = (a) => a.name.replace(/^Saw Forge\s+/, ''); // "Studio": app versions are labelled so they're never mistaken for the hub's
 const matches = (a) => !query || [a.name, a.tagline, a.description, a.category].join(' ').toLowerCase().includes(query);
 function card(a) {
   return h('div', { class: 'card', 'data-app-id': a.id },
     h('div', { class: 'card-top' }, h('img', { src: a.icon, alt: '' }), h('div', null, h('div', { class: 'card-name' }, a.name), h('div', { class: 'card-tag' }, a.tagline)), h('span', { style: { marginLeft: 'auto' } }, statusPill(a))),
     h('div', { class: 'card-desc' }, a.description),
-    h('div', { class: 'card-foot' }, h('span', { class: 'ver' }, a.installed ? `Version ${a.installed}` : `${a.version} · ${mb(a.size)}`), actionButtons(a, false)));
+    h('div', { class: 'card-foot' }, h('span', { class: 'ver' }, a.installed ? `${short(a)} ${a.installed}` : `${short(a)} ${a.version} · ${mb(a.size)}`), actionButtons(a, false)));
 }
 function hero(a) {
   return h('section', { class: 'hero', 'data-app-id': a.id },
     h('img', { src: a.icon, alt: '' }),
     h('div', null, h('div', { class: 'kicker' }, a.category || 'Featured'), h('h3', null, a.name), h('p', null, a.description),
-      h('div', { class: 'meta' }, h('span', null, `Version ${a.version}`), h('span', null, mb(a.size)), h('span', null, 'Free · open source (GPL-3.0)'), statusPill(a))),
+      h('div', { class: 'meta' }, h('span', null, `${short(a)} ${a.version}`), h('span', null, mb(a.size)), h('span', null, 'Free · open source (GPL-3.0)'), statusPill(a))),
     h('div', { class: 'actions' }, actionButtons(a, true)));
 }
 function allView() {
@@ -114,7 +115,7 @@ function allView() {
 function listRows(apps, empty) {
   if (!apps.length) return h('div', { class: 'empty' }, empty);
   return h('div', { class: 'list' }, apps.map((a) => h('div', { class: 'row', 'data-app-id': a.id }, h('img', { src: a.icon, alt: '' }),
-    h('div', { class: 'grow' }, h('div', { class: 'card-name' }, a.name, ' ', statusPill(a)), h('div', { class: 'card-tag' }, a.installed ? `Installed version ${a.installed}${a.updateAvailable ? ` · ${a.version} available` : ''}` : a.tagline)),
+    h('div', { class: 'grow' }, h('div', { class: 'card-name' }, a.name, ' ', statusPill(a)), h('div', { class: 'card-tag' }, a.installed ? `${short(a)} ${a.installed} installed${a.updateAvailable ? ` · ${a.version} available` : ''}` : a.tagline)),
     actionButtons(a, false))));
 }
 function installedView() { return [h('h1', null, 'Installed'), h('p', { class: 'sub' }, 'Apps on this computer.'), listRows(S.apps.filter((a) => a.installed && matches(a)), 'Nothing installed yet. Pick an app under All apps.')]; }
@@ -127,7 +128,7 @@ function updatesView() {
 function hubUpdateBlock() {
   const u = S.hub.update || {};
   const text = { checking: 'Checking for a new version of the hub…', downloading: `Downloading Saw Forge Hub ${u.version || ''}${u.percent != null ? ` (${u.percent}%)` : ''}…`, ready: `Saw Forge Hub ${u.version} is ready to install.`,
-    current: 'Saw Forge Hub is up to date.', error: `Couldn't check for hub updates: ${u.error || 'unknown error'}`, unconfigured: 'Hub updates turn on once the project is published on GitHub.', dev: 'Running from source: hub updates are off.' }[u.status] || `Saw Forge Hub ${S.hub.version}.`;
+    current: `Saw Forge Hub ${S.hub.version} is up to date.`, error: `Couldn't check for hub updates: ${u.error || 'unknown error'}`, unconfigured: 'Hub updates turn on once the project is published on GitHub.', dev: 'Running from source: hub updates are off.' }[u.status] || `Saw Forge Hub ${S.hub.version}.`;
   return h('div', { class: 'set', style: { marginTop: '18px' } }, h('img', { src: 'img/hub-icon.png', alt: '', width: 36, height: 36 }),
     h('div', { class: 'grow' }, h('div', { class: 't' }, 'Saw Forge Hub'), h('div', { class: 'd' }, text)),
     u.status === 'ready' ? h('button', { class: 'btn primary', onclick: () => api.hubUpdate('install') }, 'Restart to update') : h('button', { class: 'btn', onclick: () => api.hubUpdate('check') }, 'Check now'));
@@ -168,7 +169,8 @@ function render() {
   main.scrollTop = scroll;
   $('#status-left').replaceChildren(h('span', { class: 'dot' + (S.catalogSource === 'online' ? '' : S.catalogError ? ' warn' : ' off') }),
     S.catalogSource === 'online' ? `Catalog up to date · checked ${ago(S.checkedAt)}` : S.catalogError ? 'Offline: showing the apps included with the hub' : 'Apps included with this version of the hub');
-  $('#status-right').textContent = `${S.apps.filter((a) => a.installed).length} of ${S.apps.length} installed · Hub ${S.hub.version}`;
+  $('#status-right').textContent = `${S.apps.filter((a) => a.installed).length} of ${S.apps.length} installed · Saw Forge Hub ${S.hub.version}`;
+  $('#hub-ver').textContent = S.hub.version;
 }
 function go(v) { view = v; render(); $('#view').focus(); }
 
