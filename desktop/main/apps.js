@@ -229,7 +229,7 @@ class AppManager {
     this.save();
   }
   removeShortcuts(id) {
-    if (process.platform !== 'win32') return;
+    if (!this.shortcutsEnabled()) return; // never from source runs or the self-test: those must not touch a real install's shortcuts
     const p = this.shortcutPaths(id);
     for (const f of [p.startMenu, p.desktop]) { try { fs.rmSync(f, { force: true }); } catch { /* ignore */ } }
     if (this.state.desktopLinks && this.state.desktopLinks[id]) { delete this.state.desktopLinks[id]; this.save(); }
