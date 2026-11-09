@@ -1,0 +1,56 @@
+# The download website (GitHub Pages). Runs from main, which is what the
+# github-pages environment allows:
+#   - when anything in site/ changes,
+#   - after every successful Release (to show the new version, sizes and checksums),
+#   - or by hand (Actions → Website → Run workflow).
+# It publishes site/ plus latest.json (download links) and catalog.json (the hub's app list)
+# taken from the latest published release.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'desktop/scripts/site-data.mjs', '.github/workflows/pages.yml']
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - name: Build the site with the latest release's downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED_WINDOWS: ${{ secrets.WIN_CSC_LINK != '' }}
+          SIGNED_MAC: ${{ secrets.MAC_CSC_LINK != '' && secrets.APPLE_TEAM_ID != '' }}
+        run: |
+          mkdir -p _site assets && cp -r site/. _site/
+          tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName 2>/dev/null || true)
+          if [ -n "$tag" ]; then
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" -D assets -p '*.exe' -p '*.dmg' -p 'catalog.json'
+            cp assets/catalog.json _site/catalog.json
+            TAG="$tag" node desktop/scripts/site-data.mjs assets _site/latest.json
+          else
+            echo "No release yet: the site links to the Releases page until there is one."
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+      - id: deploy
+        uses: actions/deploy-pages@v4

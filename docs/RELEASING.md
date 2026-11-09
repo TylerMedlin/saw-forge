@@ -15,8 +15,8 @@ site is updated.
 3. **Turn on GitHub Pages**: repository *Settings → Pages → Build and deployment →
    Source: GitHub Actions*. The site will live at
    `https://tylermedlin.github.io/saw-forge/`.
-4. **Allow the workflow to publish releases**: *Settings → Actions → General →
-   Workflow permissions → Read and write permissions*.
+   Leave *Settings → Actions → General → Workflow permissions* on read-only. Each
+   workflow asks for exactly the write access it needs.
 
 ## Making a release
 
@@ -30,12 +30,16 @@ site is updated.
    ```
 3. Watch *Actions → Release*. It runs these jobs:
    - **draft:** creates a draft release.
-   - **apps:** packs each app into a reproducible zip and attaches it.
+   - **apps:** packs each app into a reproducible zip and attaches it, along with `catalog.json`.
    - **build:** runs the desktop self-test on Windows and on macOS, then builds
      `SawForgeHub-Setup-x.y.z-win-x64.exe` and `SawForgeHub-x.y.z-mac-universal.dmg`
      (plus the update files the hub uses).
-   - **publish:** adds `SHA256SUMS.txt`, publishes the release and deploys the
-     website with `latest.json` and the hub's `catalog.json`.
+   - **publish:** adds `SHA256SUMS.txt` and publishes the release.
+
+   Then the **Website** workflow runs from `main`, which is the only place GitHub
+   Pages accepts deployments from. It puts the new version's download links,
+   sizes, checksums and the hub's `catalog.json` on the site. It also runs when
+   anything in `site/` changes, and you can start it by hand under *Actions → Website*.
 
 Installed hubs see new app versions within a few hours, or right away with the
 refresh button. On Windows the hub updates itself in the background and asks

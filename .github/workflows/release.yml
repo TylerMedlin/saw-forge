@@ -2,9 +2,10 @@
 # (the tag must match desktop/package.json "version").
 #
 #   1. draft    creates a draft GitHub release for the tag
-#   2. apps     packs every app (reproducible zips) and attaches them
+#   2. apps     packs every app (reproducible zips) and attaches them with catalog.json
 #   3. build    Windows installer (on Windows) and macOS disk image (on a Mac), attached by electron-builder
-#   4. publish  adds SHA256SUMS.txt, publishes the release, and deploys the download site + app catalog to GitHub Pages
+#   4. publish  adds SHA256SUMS.txt and publishes the release
+# When it succeeds, the Website workflow (pages.yml) updates the download site.
 #
 # Code signing switches on when these repository secrets exist (all optional):
 #   WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD                      Windows certificate (.pfx, base64) and password
@@ -18,8 +19,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -51,11 +50,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '${{ env.NODE_VERSION }}' }
       - run: node scripts/pack-apps.mjs
-      - name: Attach app packages
+      - name: Attach app packages and the catalog
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
-        run: gh release upload "$TAG" dist-apps/*.zip --clobber
-      - uses: actions/upload-artifact@v4
-        with: { name: dist-apps, path: desktop/dist-apps }
+        run: gh release upload "$TAG" dist-apps/*.zip dist-apps/catalog.json --clobber
 
   build:
     needs: draft
@@ -93,32 +90,13 @@ jobs:
   publish:
     needs: [apps, build]
     runs-on: ubuntu-latest
-    environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '${{ env.NODE_VERSION }}' }
-      - uses: actions/download-artifact@v4
-        with: { name: dist-apps, path: dist-apps }
       - name: Checksums for every file in the release
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
         run: |
-          mkdir assets && gh release download "$TAG" -D assets
+          mkdir assets && gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D assets
           (cd assets && rm -f SHA256SUMS.txt && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
-          gh release upload "$TAG" assets/SHA256SUMS.txt --clobber
+          gh release upload "$TAG" assets/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
       - name: Publish the release
         env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
-        run: gh release edit "$TAG" --draft=false --latest
-      - name: Build the download site
-        env:
-          SIGNED_WINDOWS: ${{ secrets.WIN_CSC_LINK != '' }}
-          SIGNED_MAC: ${{ secrets.MAC_CSC_LINK != '' && secrets.APPLE_TEAM_ID != '' }}
-        run: |
-          mkdir -p _site && cp -r site/. _site/
-          cp dist-apps/catalog.json _site/catalog.json
-          node desktop/scripts/site-data.mjs assets _site/latest.json
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: _site }
-      - id: deploy
-        uses: actions/deploy-pages@v4
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

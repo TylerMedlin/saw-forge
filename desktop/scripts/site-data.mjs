@@ -1,6 +1,7 @@
 // Writes latest.json for the download site from a folder of release files:
 // the version, and for each installer its name, size, SHA-256 and download URL.
 //   node scripts/site-data.mjs <folder with release files> <output latest.json>
+// TAG=v1.2.3 names the release the files came from (default: desktop/package.json version).
 import { readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -11,7 +12,8 @@ if (!dir || !outFile) { console.error('usage: site-data.mjs <assets dir> <out fi
 const DESKTOP = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cfg = JSON.parse(readFileSync(join(DESKTOP, 'sawforge.config.json'), 'utf8'));
 const pkg = JSON.parse(readFileSync(join(DESKTOP, 'package.json'), 'utf8'));
-const tag = `v${pkg.version}`, base = `https://github.com/${cfg.githubOwner}/${cfg.githubRepo}/releases/download/${tag}/`;
+const tag = process.env.TAG || `v${pkg.version}`, version = tag.replace(/^v/, '');
+const base = `https://github.com/${cfg.githubOwner}/${cfg.githubRepo}/releases/download/${tag}/`;
 
 const info = (name) => {
   const p = join(dir, name), data = readFileSync(p);
@@ -20,7 +22,7 @@ const info = (name) => {
 const files = readdirSync(dir);
 const pick = (re) => { const f = files.find((x) => re.test(x)); return f ? info(f) : null; };
 const latest = {
-  version: pkg.version, tag, date: new Date().toISOString().slice(0, 10),
+  version, tag, date: new Date().toISOString().slice(0, 10),
   repoUrl: `https://github.com/${cfg.githubOwner}/${cfg.githubRepo}`,
   releaseUrl: `https://github.com/${cfg.githubOwner}/${cfg.githubRepo}/releases/tag/${tag}`,
   checksumsUrl: base + 'SHA256SUMS.txt',
