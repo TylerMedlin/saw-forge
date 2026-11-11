@@ -1,14 +1,14 @@
 {
   "_comment": "Apps the hub offers. pack-apps zips each one into a verified package and writes the catalog.",
-  "hubNotes": "The hub now shows its own version in the top bar, and app versions are labelled by app (for example \"Studio 1.0.0\"), so an app's version is never mistaken for the hub's. Updating from 1.0.0 or 1.0.1 shows the setup wizard one last time: click Next through it.",
+  "hubNotes": "Beta: Saw Forge Studio 1.1 adds Session Pianist, a physically modelled piano with a virtual session pianist and a Chord Composer. Updating from 1.0.0 or 1.0.1 shows the setup wizard one last time: click Next through it.",
   "apps": [
     {
       "id": "saw-forge-studio",
       "name": "Saw Forge Studio",
-      "version": "1.0.0",
-      "releasedWith": "1.0.0",
+      "version": "1.1.0",
+      "releasedWith": "1.0.4",
       "tagline": "Music production studio",
-      "description": "Arrange, record and mix with the Saw Forge wavetable synth, Worship Atmospheres pads, virtual EDM drummers, take comping and automation.",
+      "description": "Arrange, record and mix with the Saw Forge wavetable synth, Worship Atmospheres pads, the Session Pianist (beta), virtual EDM drummers, take comping and automation.",
       "category": "Music production",
       "root": "..",
       "include": [
@@ -27,7 +27,7 @@
         "backgroundColor": "#121417"
       },
       "dataFolder": "Saw Forge Studio",
-      "notes": "First desktop release: Saw Forge synth, Worship Atmospheres with Live Pad Mode and setlists, Drummer, recording with take lanes and comping, automation, WAV export."
+      "notes": "Beta: Session Pianist. A physically modelled piano (five pianos, no samples, sustain-pedal resonance), a virtual pianist with 8 personalities and 12 styles that jams with your chords and the Drummer, and a Chord Composer that writes progressions and full song parts. Add it from Browser, Instruments."
     }
   ],
   "comingSoon": [
