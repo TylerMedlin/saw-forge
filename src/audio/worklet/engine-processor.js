@@ -13,6 +13,8 @@
 import { SawForge } from './sawforge.js';
 import { PadEngine, LivePadHost } from './worship.js';
 import { DrumKit } from './drums.js';
+import { Piano } from './piano.js';
+import { PIANO_PARAMS } from '../../shared/piano-params.js';
 import { DRUM_PARAMS } from '../../shared/drums.js';
 import { WORSHIP_PARAMS } from '../../shared/worship-params.js';
 import { FxSlot } from './effects.js';
@@ -121,6 +123,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         else if (m.ev === 'bend') ch.inst.pitchBend(m.value);
         else if (m.ev === 'mw') ch.inst.modWheel(m.value);
         else if (m.ev === 'allOff') ch.inst.allNotesOff(false);
+        else if (m.ev === 'pedal' && ch.inst.setPedal) ch.inst.setPedal(m.value);
         break;
       }
       case 'panic': this.recover(false); break;
@@ -249,7 +252,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         return slot;
       });
       if (c.inst) {
-        const Kind = c.inst.type === 'worship' ? PadEngine : c.inst.type === 'live' ? LivePadHost : c.inst.type === 'drums' ? DrumKit : SawForge;
+        const Kind = c.inst.type === 'worship' ? PadEngine : c.inst.type === 'live' ? LivePadHost : c.inst.type === 'drums' ? DrumKit : c.inst.type === 'piano' ? Piano : SawForge;
         if (!ch.inst || ch.inst.constructor !== Kind) {
           if (ch.inst) ch.inst.allNotesOff(true);
           ch.inst = new Kind(this.sr);
@@ -271,7 +274,7 @@ class EngineProcessor extends AudioWorkletProcessor {
   }
 
   buildLanes(ch, lanes) {
-    const IP = ch.inst instanceof PadEngine ? WORSHIP_PARAMS : ch.inst instanceof DrumKit ? DRUM_PARAMS : SYNTH_PARAMS;
+    const IP = ch.inst instanceof PadEngine ? WORSHIP_PARAMS : ch.inst instanceof DrumKit ? DRUM_PARAMS : ch.inst instanceof Piano ? PIANO_PARAMS : SYNTH_PARAMS;
     const instFlags = ch.inst ? new Uint8Array(IP.length) : null;
     const fxFlags = ch.inserts.map((s) => new Uint8Array(s.auto.length));
     ch.hasAutoVol = false; ch.hasAutoPan = false;

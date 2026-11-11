@@ -6,6 +6,9 @@ import { getWtPreset, makeFrame, WT_MAX_KEYS } from '../shared/wavetable.js';
 import { WP_DEF, worshipDefaults } from '../shared/worship-params.js';
 import { worshipPresetByName, worshipPresetParams } from '../shared/worship-presets.js';
 import { DRUM_DEF, drumDefaults, kitIndex, KIT_NAMES } from '../shared/drums.js';
+import { PIANO_DEF, PIANO_MODEL_NAMES, pianoDefaults } from '../shared/piano-params.js';
+import { newPianistSettings, normPianistSettings, pianistById } from '../shared/pianist.js';
+import { newComposer, normComposer } from '../shared/composer.js';
 import { newDrummerSettings, normDrummerSettings, drummerById } from '../shared/drummers.js';
 
 export const WORSHIP_WT = ['Analog Saw', 'Saw → Square', 'Dark → Bright', 'Formant Sweep'];
@@ -31,6 +34,7 @@ export function newProject(name = 'Untitled') {
     master: newMaster(),
     assets: [],
     live: newLive(),
+    composer: newComposer(),
   };
 }
 
@@ -48,12 +52,22 @@ export function newDrumInstrument(kitName = 'Festival') {
 export function newDrummerClip(start, length, settings = newDrummerSettings('nova'), name = null) {
   return { id: uid('clp'), kind: 'drummer', name: name || drummerById(settings.id).name, start, length, offset: 0, mute: false, dr: settings };
 }
+// Session Pianist: physically modelled piano (the character is the 'model' parameter).
+export function newPianoInstrument(model = 0) {
+  return { type: 'piano', preset: PIANO_MODEL_NAMES[model] || PIANO_MODEL_NAMES[0], params: { ...pianoDefaults(), model }, wt: [] };
+}
+// A Pianist region: who plays, the chords and how; the notes are generated when the project compiles.
+export function newPianistClip(start, length, settings = newPianistSettings('worship'), name = null) {
+  return { id: uid('clp'), kind: 'pianist', name: name || pianistById(settings.id).short, start, length, offset: 0, mute: false, pn: settings };
+}
+export const isPianoTrack = (t) => !!(t && t.instrument && t.instrument.type === 'piano');
 export const isDrumTrack = (t) => !!(t && t.instrument && t.instrument.type === 'drums');
 // Can this clip live on this track? (audio ↔ audio tracks, MIDI ↔ instruments, Drummer ↔ drum tracks)
 export function clipFits(t, clip) {
   if (!t) return false;
   if (clip.kind === 'audio') return t.kind === 'audio';
   if (clip.kind === 'drummer') return isDrumTrack(t);
+  if (clip.kind === 'pianist') return isPianoTrack(t);
   return t.kind === 'instrument';
 }
 
@@ -174,6 +188,7 @@ export function normalizeProject(raw) {
   p.punch = { on: !!pu.on, start: Math.max(0, num(pu.start, 4)), end: num(pu.end, 8), preRoll: [-1, 0, 1, 2].includes(pu.preRoll) ? pu.preRoll : 1, set: !!pu.set };
   if (p.punch.end < p.punch.start + 0.25) p.punch.end = p.punch.start + 4;
   p.metronome = { on: false, level: 0.6, countIn: 1, ...(p.metronome || {}) };
+  p.composer = normComposer(raw && raw.composer);
   p.markers = (Array.isArray(p.markers) ? p.markers : []).map((m) => ({ id: m.id || uid('mrk'), beat: num(m.beat, 0), name: String(m.name || 'Marker') }));
   p.assets = (Array.isArray(p.assets) ? p.assets : []).filter((a) => a && a.id);
   p.buses = (Array.isArray(p.buses) ? p.buses : []).map((b) => ({
@@ -202,16 +217,20 @@ export function normalizeProject(raw) {
       base.instrument = normWorship(t.instrument);
     } else if (kind === 'instrument' && t.instrument && t.instrument.type === 'drums') {
       base.instrument = normDrums(t.instrument);
+    } else if (kind === 'instrument' && t.instrument && t.instrument.type === 'piano') {
+      base.instrument = normPiano(t.instrument);
     } else if (kind === 'instrument') {
       const ins = t.instrument || {};
       const params = synthDefaults();
       for (const [k, v] of Object.entries(ins.params || {})) if (SYNTH_DEF[k] && typeof v === 'number' && Number.isFinite(v)) params[k] = v;
       base.instrument = { type: 'sawforge', preset: String(ins.preset || 'Custom'), params, wt: [normWavetable(ins.wt && ins.wt[0], 'Analog Saw'), normWavetable(ins.wt && ins.wt[1], 'Saw → Square')] };
     } else base.instrument = null;
-    const drums = base.instrument && base.instrument.type === 'drums';
-    base.clips = (Array.isArray(t.clips) ? t.clips : []).filter((c) => c && (kind === 'instrument' ? c.kind === 'midi' || (drums && c.kind === 'drummer') : c.kind === 'audio')).map((c) => {
+    const drums = base.instrument && base.instrument.type === 'drums', piano = base.instrument && base.instrument.type === 'piano';
+    base.clips = (Array.isArray(t.clips) ? t.clips : []).filter((c) => c && (kind === 'instrument' ? c.kind === 'midi' || (drums && c.kind === 'drummer') || (piano && c.kind === 'pianist') : c.kind === 'audio')).map((c) => {
       const clip = { ...c, id: c.id || uid('clp'), start: Math.max(0, num(c.start, 0)), length: Math.max(0.0625, num(c.length, 4)), offset: Math.max(0, num(c.offset, 0)), mute: !!c.mute };
-      if (c.kind === 'drummer') {
+      if (c.kind === 'pianist') {
+        clip.pn = normPianistSettings(c.pn); clip.offset = 0; clip.name = String(c.name || pianistById(clip.pn.id).short);
+      } else if (c.kind === 'drummer') {
         clip.dr = normDrummerSettings(c.dr); clip.offset = 0; clip.name = String(c.name || drummerById(clip.dr.id).name);
       } else if (c.kind === 'midi') {
         clip.loopLen = Math.max(0.0625, num(c.loopLen, clip.length));
@@ -239,6 +258,15 @@ function normWorship(ins) {
   }
   const wt = WORSHIP_WT.map((n, i) => normWavetable(ins && ins.wt && ins.wt[i], n));
   return { type: 'worship', preset: String((ins && ins.preset) || 'Custom'), params, wt, custom: String((ins && ins.custom) || '0 7 12 16') };
+}
+function normPiano(ins) {
+  const params = pianoDefaults();
+  for (const [k, v] of Object.entries((ins && ins.params) || {})) {
+    const d = PIANO_DEF[k];
+    if (d && typeof v === 'number' && Number.isFinite(v)) params[k] = Math.min(d.max, Math.max(d.min, v));
+  }
+  params.model = Math.round(params.model);
+  return { type: 'piano', preset: String((ins && ins.preset) || PIANO_MODEL_NAMES[params.model]), params, wt: [] };
 }
 function normDrums(ins) {
   const params = drumDefaults();

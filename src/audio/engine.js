@@ -202,6 +202,7 @@ export class AudioEngine extends EventTarget {
 
   setInstParam(trackId, pid, value) { this.post({ type: 'param', ch: trackId, scope: 'inst', index: SYNTH_INDEX[pid], value }); }
   setWorshipParam(chId, pid, value) { this.post({ type: 'param', ch: chId, scope: 'inst', index: WP_INDEX[pid], value }); }
+  setInstIndex(chId, index, value) { this.post({ type: 'param', ch: chId, scope: 'inst', index, value }); }
   setDrumParam(chId, pid, value) { this.post({ type: 'param', ch: chId, scope: 'inst', index: DRUM_INDEX[pid], value }); }
   livePad(op, data = {}) { this.post({ type: 'livePad', op, ...data }); }
   setScope(ch) { this.post({ type: 'scope', ch }); }

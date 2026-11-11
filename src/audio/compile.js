@@ -5,15 +5,21 @@
 import { SYNTH_PARAMS, SYNTH_INDEX, EFFECT_DEFS, dbToGain, effectParamIndex } from '../shared/params.js';
 import { worshipParamArray, parseIntervals } from '../shared/worship-params.js';
 import { drumParamArray } from '../shared/drums.js';
+import { pianoParamArray } from '../shared/piano-params.js';
 import { generateDrummer } from '../shared/drummers.js';
+import { generatePianist } from '../shared/pianist.js';
 import { instDefs } from '../shared/instruments.js';
 
 export const MIN_NOTE = 0.01; // beats
 
-export function compileNotes(track, barLen = 4) {
+export function compileNotes(track, barLen = 4, ctx = null, tempo = 0, loopStart = -1) {
   const ev = [];
   for (const clip of track.clips) {
     if (clip.mute) continue;
+    if (clip.kind === 'pianist') { // Pianist region: generate the performance
+      for (const n of generatePianist(clip.pn, clip.length, barLen, ctx && { ...ctx, start: clip.start })) { const s = clip.start + n.s; ev.push([s, s + Math.max(n.l, MIN_NOTE), n.p, n.v]); }
+      continue;
+    }
     if (clip.kind === 'drummer') { // Drummer region: generate its hits
       for (const n of generateDrummer(clip.dr, clip.length, barLen)) { const s = clip.start + n.s; ev.push([s, s + Math.max(n.l, MIN_NOTE), n.p, n.v]); }
       continue;
@@ -35,10 +41,37 @@ export function compileNotes(track, barLen = 4) {
       if (k > 100000) break;
     }
   }
+  // Session Pianist: a struck string takes ~0.42 periods to reach the bridge (14 ms at A0, <2 ms above middle C),
+  // so timeline notes are sent that much early and sound on the grid (live playing keeps the natural delay)
+  if (tempo > 0 && track.instrument && track.instrument.type === 'piano') {
+    for (const e of ev) { // never pulled across the start of the song or of the loop (it would be skipped)
+      const d = (0.42 / (440 * Math.pow(2, (e[2] - 69) / 12))) * (tempo / 60), floor = loopStart >= 0 && e[0] >= loopStart - 1e-9 ? loopStart : 0;
+      e[0] = Math.max(floor, e[0] - d); e[1] = Math.max(e[0] + MIN_NOTE, e[1] - d);
+    }
+  }
   ev.sort((a, b) => a[0] - b[0] || a[2] - b[2]);
   const out = new Float64Array(ev.length * 4);
   ev.forEach((e, i) => { out[i * 4] = e[0]; out[i * 4 + 1] = e[1]; out[i * 4 + 2] = e[2]; out[i * 4 + 3] = e[3]; });
   return out;
+}
+
+// What a Session Pianist listens to: tempo, song sections (markers) and the drum groove per bar.
+export function songContext(p) {
+  const barLen = (p.sigNum * 4) / p.sigDen, bars = new Map();
+  for (const t of p.tracks) {
+    if (!t.instrument || t.instrument.type !== 'drums' || t.mute) continue;
+    const ev = compileNotes(t, barLen);
+    for (let i = 0; i < ev.length; i += 4) {
+      const s = ev[i], pc = ev[i + 2], b = Math.floor(s / barLen + 1e-9);
+      let g = bars.get(b);
+      if (!g) bars.set(b, (g = { k: [], s: [], toms: 0, vs: 0, n: 0 }));
+      if (pc === 35 || pc === 36) g.k.push(s - b * barLen);
+      else if (pc === 38 || pc === 39 || pc === 40) g.s.push(s - b * barLen);
+      else if ([41, 43, 45, 47, 48, 50].includes(pc)) g.toms++;
+      g.vs += ev[i + 3]; g.n++;
+    }
+  }
+  return { tempo: p.tempo, markers: p.markers || [], groove: (beat) => { const g = bars.get(Math.floor(beat / barLen + 1e-9)); return g ? { k: g.k, s: g.s, fill: g.toms >= 3, loud: g.vs / g.n } : null; } };
 }
 
 export function parseTarget(target, instType = 'sawforge') {
@@ -100,6 +133,7 @@ export function compileInstrument(inst, snap) {
   if (!inst) return null;
   if (inst.type === 'worship') return { type: 'worship', params: worshipParamArray(inst.params), snap, custom: parseIntervals(inst.custom) };
   if (inst.type === 'drums') return { type: 'drums', params: drumParamArray(inst.params), snap };
+  if (inst.type === 'piano') return { type: 'piano', params: pianoParamArray(inst.params), snap };
   return { params: instParamArray(inst), snap };
 }
 
@@ -109,6 +143,7 @@ export function compileProject(p, { slotOf = () => -1, transport = {}, snap = nu
   const trackAudible = (t) => !t.mute && (!anySolo || t.solo || soloBuses.has(t.output) || t.sends.some((s) => soloBuses.has(s.busId)));
   const busAudible = (b) => !b.mute && (soloBuses.size === 0 || b.solo);
   const channels = [];
+  let sctx = null;
   for (const t of p.tracks) {
     // auditioning a take lane: that track plays the lane instead of its comp
     const auLane = audition && audition.track === t.id ? (t.takeLanes || []).find((l) => l.id === audition.lane) : null;
@@ -121,7 +156,7 @@ export function compileProject(p, { slotOf = () => -1, transport = {}, snap = nu
       sends: t.sends.map((s) => ({ bus: s.busId, gain: dbToGain(s.level), pre: !!s.pre })),
       inserts: compileInserts(t.inserts),
       inst: compileInstrument(t.instrument, snap ? snap.has(t.id) : false),
-      notes: t.kind === 'instrument' ? compileNotes(t, (p.sigNum * 4) / p.sigDen) : null,
+      notes: t.kind === 'instrument' ? compileNotes(t, (p.sigNum * 4) / p.sigDen, t.clips.some((c) => c.kind === 'pianist') ? (sctx || (sctx = songContext(p))) : null, p.tempo, p.loop && p.loop.on ? p.loop.start : -1) : null,
       regions: t.kind === 'audio' ? audioClips.filter((c) => !c.mute).map((c) => ({
         asset: c.assetId, start: c.start, end: c.start + c.length, offset: c.offset || 0, gain: dbToGain(c.gain || 0),
         fadeIn: c.fadeIn || 0, fadeOut: c.fadeOut || 0,

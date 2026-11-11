@@ -73,6 +73,7 @@ export class BrowserPanel {
     out.push(this.section('Instruments', 'Instruments', [
       this.match('saw forge', 'synth', 'instrument') ? this.item('Saw Forge', { kind: 'instrument', name: 'Saw Forge' }, { icon: 'synth', cls: 'accent', meta: 'synth', title: 'Wavetable analog synth — drag to the arrangement or double-click to add a track' }) : null,
       this.match('drummer', 'drums', 'edm', 'beat', 'instrument', 'kit') ? this.item('Drummer', { kind: 'drumkit', name: 'Drummer' }, { icon: 'metro', cls: 'accent', meta: 'drums', title: 'Virtual EDM drummer + synthesized kit — double-click or drag to add a Drummer track' }) : null,
+      this.match('session pianist', 'piano', 'keys', 'instrument', 'grand', 'upright') ? this.item('Session Pianist', { kind: 'piano', name: 'Session Pianist' }, { icon: 'synth', cls: 'accent', meta: 'piano', title: 'Physically modelled piano (no samples) — double-click or drag to add a track' }) : null,
       this.match('worship atmospheres', 'pad', 'instrument', 'strings') ? this.item('Worship Atmospheres', { kind: 'worship', name: 'Worship Atmospheres' }, { icon: 'live', cls: 'accent', meta: 'pads', title: 'Sustaining worship pad engine — double-click to add a track; use LIVE PAD (P) to play it without the timeline' }) : null,
     ], 'synth'));
     const drummers = DRUMMERS.filter((d) => this.match(d.name, d.genre, ...d.traits, 'drummer', 'drums', 'edm'));
@@ -118,6 +119,7 @@ export class BrowserPanel {
       else app.addDrummerTrack(pl.id);
     }
     else if (pl.kind === 'worship') app.addWorshipTrack();
+    else if (pl.kind === 'piano') app.addPianoTrack();
     else if (pl.kind === 'wpreset') {
       if (app.ui.live) app.loadPadPreset('livepad', pl.name);
       else if (sel && sel.instrument && sel.instrument.type === 'worship') { app.loadPadPreset(sel.id, pl.name); toast(`Loaded ${pl.name} on ${sel.name}`); }

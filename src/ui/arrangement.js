@@ -10,6 +10,8 @@ import { findChannel, findClip, findTrack, barBeats, projectEndBeat, TRACK_COLOR
 import { instDefs } from '../shared/instruments.js';
 import { PIECES } from '../shared/drums.js';
 import { generateDrummer, drummerById, SPEED_NAMES } from '../shared/drummers.js';
+import { generatePianist } from '../shared/pianist.js';
+import { songContext } from '../audio/compile.js';
 import { SYNTH_PARAMS, SYNTH_DEF, EFFECT_DEFS, MIX_PARAMS, toNorm, fromNorm, formatValue, faderDbToNorm } from '../shared/params.js';
 import { WORSHIP_PARAMS, WP_DEF } from '../shared/worship-params.js';
 import { usedRanges, laneUsage } from '../core/comp.js';
@@ -263,7 +265,7 @@ export class Arrangement {
         vol.setAutomated(app.hasAutomation(id, 'mix:vol'));
         if (row.kind === 'track') {
           const out = ch.output && ch.output !== 'master' ? (findChannel(app.p, ch.output) || {}).name : null;
-          sub.textContent = ch.kind === 'instrument' ? `${ch.instrument.type === 'worship' ? 'Worship' : ch.instrument.type === 'drums' ? 'Drummer · kit' : 'Saw Forge'} · ${ch.instrument.preset}${out ? ' → ' + out : ''}`
+          sub.textContent = ch.kind === 'instrument' ? `${ch.instrument.type === 'worship' ? 'Worship' : ch.instrument.type === 'drums' ? 'Drummer · kit' : ch.instrument.type === 'piano' ? 'Session Pianist' : 'Saw Forge'} · ${ch.instrument.preset}${out ? ' → ' + out : ''}`
             : `Audio · In ${inputLabel(ch.input)}${ch.monitor ? ' · monitoring' : ''}${out ? ' → ' + out : ''}`;
           el.classList.toggle('compact', row.h < 56);
         }
@@ -558,18 +560,20 @@ export class Arrangement {
     c.fillStyle = '#101214'; c.font = '600 10.5px var(--font-ui, sans-serif)';
     if (w > 24) c.fillText((offline ? '⚠ ' : '') + (clip.name || ''), x0 + 5, top + 11);
     const bodyTop = top + CLIP_HEAD + 2, bodyH = hh - CLIP_HEAD - 4;
-    if (clip.kind === 'midi' && clip.notes.length && bodyH > 4) {
+    const pnNotes = clip.kind === 'pianist' ? this.pianistNotes(clip) : null;
+    if (((clip.kind === 'midi' && clip.notes.length) || (pnNotes && pnNotes.length)) && bodyH > 4) {
+      const notes = pnNotes || clip.notes;
       let lo = 127, hi = 0;
-      for (const n of clip.notes) { if (n.p < lo) lo = n.p; if (n.p > hi) hi = n.p; }
+      for (const n of notes) { if (n.p < lo) lo = n.p; if (n.p > hi) hi = n.p; }
       lo -= 2; hi += 2;
       const span = Math.max(8, hi - lo), nh = Math.max(1.5, Math.min(5, bodyH / span));
-      const L = clip.loopLen || clip.length, off = clip.offset || 0;
+      const L = pnNotes ? clip.length : clip.loopLen || clip.length, off = pnNotes ? 0 : clip.offset || 0;
       c.fillStyle = hexA(col === '#6a7178' ? '#9aa0a6' : '#ffffff', 0.85);
       for (let k = Math.floor(off / L); ; k++) {
         const base = clip.start - off + k * L;
         if (base >= clip.start + clip.length) break;
         if (k > Math.floor(off / L)) { c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillRect(this.x(base), bodyTop, 1, bodyH); c.fillStyle = hexA('#ffffff', 0.85); }
-        for (const n of clip.notes) {
+        for (const n of notes) {
           if (n.s >= L) continue;
           const sb = base + n.s;
           if (sb < clip.start || sb >= clip.start + clip.length) continue;
@@ -624,6 +628,17 @@ export class Arrangement {
     }
   }
 
+  // Generated notes of a Pianist region (cached until its settings, length or position change)
+  pianistNotes(clip) {
+    if (!this.pnCache) this.pnCache = new Map();
+    const p = this.app.p, bar = barBeats(p), key = JSON.stringify(clip.pn) + '|' + clip.length + '|' + clip.start + '|' + bar + '|' + p.tempo;
+    const hit = this.pnCache.get(clip.id);
+    if (hit && hit.key === key) return hit.notes;
+    const notes = generatePianist(clip.pn, clip.length, bar, { ...songContext(p), start: clip.start });
+    if (this.pnCache.size > 200) this.pnCache.clear();
+    this.pnCache.set(clip.id, { key, notes });
+    return notes;
+  }
   // Generated hits of a Drummer region (cached until its settings or length change)
   drummerHits(clip) {
     if (!this.drCache) this.drCache = new Map();
@@ -1024,7 +1039,7 @@ export class Arrangement {
     const app = this.app;
     const { x, y } = this.local(e);
     const ht = this.hit(x, y);
-    if (ht.type === 'clip') { if (ht.clip.kind === 'midi' || ht.clip.kind === 'drummer') app.editClip(ht.clip.id); return; }
+    if (ht.type === 'clip') { if (ht.clip.kind === 'midi' || ht.clip.kind === 'drummer' || ht.clip.kind === 'pianist') app.editClip(ht.clip.id); return; }
     if (ht.type === 'point') {
       const chId = ht.row.ch.id, laneId = ht.row.lane.id;
       app.store.do('Delete automation point', (q) => { const lane = findChannel(q, chId).automation.find((a) => a.id === laneId); lane.points.splice(ht.index, 1); }, 'auto', { id: chId });
@@ -1055,6 +1070,10 @@ export class Arrangement {
         clip.kind === 'drummer' ? { label: 'New take (re-roll the groove)', action: () => app.newDrummerTake(clip.id) } : null,
         clip.kind === 'drummer' ? { label: 'Convert to MIDI clip', action: () => app.drummerToMidi(clip.id) } : null,
         clip.kind === 'drummer' ? { sep: true } : null,
+        clip.kind === 'pianist' ? { label: 'Edit Pianist…', action: () => app.editClip(clip.id) } : null,
+        clip.kind === 'pianist' ? { label: 'New take (regenerate)', action: () => app.newPianistTake(clip.id) } : null,
+        clip.kind === 'pianist' ? { label: 'Keep as MIDI clip (editable)', action: () => app.pianistToMidi(clip.id) } : null,
+        clip.kind === 'pianist' ? { sep: true } : null,
         { label: 'Rename…', action: async () => { const n = await promptText('Rename clip', clip.name); if (n) app.store.do('Rename clip', (q) => { findClip(q, clip.id).clip.name = n; }, 'clips'); } },
         { label: 'Duplicate', shortcut: 'Ctrl+D', action: () => app.duplicateClips(ids) },
         { label: 'Split at playhead', shortcut: 'Ctrl+E', action: () => app.splitClips(ids, app.ui.cursor) },
@@ -1236,6 +1255,7 @@ export class Arrangement {
       else app.addDrummerTrack(pl.id, row && row.kind === 'track' ? row.index + 1 : null);
     }
     else if (pl.kind === 'worship') app.addWorshipTrack('Endless Worship', row && row.kind === 'track' ? row.index + 1 : null);
+    else if (pl.kind === 'piano') app.addPianoTrack(0, row && row.kind === 'track' ? row.index + 1 : null);
     else if (pl.kind === 'wpreset') {
       if (row && row.kind === 'track' && row.ch.instrument && row.ch.instrument.type === 'worship') { app.loadPadPreset(row.ch.id, pl.name); toast(`Loaded ${pl.name}`); }
       else app.addWorshipTrack(pl.name, row && row.kind === 'track' ? row.index + 1 : null);

@@ -10,6 +10,7 @@ import { Mixer } from './mixer.js';
 import { PianoRoll } from './pianoroll.js';
 import { SynthEditor } from './synth-editor.js';
 import { WorshipEditor } from './worship-editor.js';
+import { PianoEditor } from './piano-editor.js';
 import { DrummerEditor } from './drummer-editor.js';
 import { LiveView } from './live-view.js';
 import { Devices } from './devices.js';
@@ -38,23 +39,27 @@ export class Shell {
     this.synth = new SynthEditor(app, this);
     this.worship = new WorshipEditor(app, this);
     this.drummer = new DrummerEditor(app, this);
+    this.piano = new PianoEditor(app, this);
     this.live = new LiveView(app, this);
     // the instrument tab shows whichever instrument is being edited
     const inst = {
-      el: h('div', { class: 'inst-panel' }, this.synth.el, this.worship.el, this.drummer.el),
+      el: h('div', { class: 'inst-panel' }, this.synth.el, this.worship.el, this.drummer.el, this.piano.el),
       refresh: (d) => {
-        const wp = !!this.worship.pickTarget(), dr = !wp && !!this.drummer.pickTarget();
-        this.synth.el.style.display = wp || dr ? 'none' : '';
+        const wp = !!this.worship.pickTarget(), dr = !wp && !!this.drummer.pickTarget(), pn = !wp && !dr && !!this.piano.pickTarget();
+        this.synth.el.style.display = wp || dr || pn ? 'none' : '';
+        this.piano.el.style.display = pn ? '' : 'none';
+        if (!pn) this.piano.trackId = null;
         this.worship.el.style.display = wp ? '' : 'none';
         this.drummer.el.style.display = dr ? '' : 'none';
         // a hidden editor forgets its target, so it re-points the engine's scope when it comes back
         if (!wp) this.worship.target = null;
         if (!dr) this.drummer.trackId = null;
-        if (wp) this.worship.refresh(d); else if (dr) this.drummer.refresh(d); else this.synth.refresh(d);
+        if (wp) this.worship.refresh(d); else if (dr) this.drummer.refresh(d); else if (pn) this.piano.refresh(d); else this.synth.refresh(d);
       },
       frame: (t) => {
         if (this.worship.el.style.display !== 'none') this.worship.frame(t);
         else if (this.drummer.el.style.display !== 'none') this.drummer.frame(t);
+        else if (this.piano.el.style.display !== 'none') this.piano.frame(t);
         else this.synth.frame(t);
       },
     };
