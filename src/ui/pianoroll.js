@@ -4,7 +4,7 @@
 import { h, drag, Surface, clamp, noteName, isBlack, css } from './dom.js';
 import { icon } from './icons.js';
 import { selectEl, contextMenu, toast } from './widgets.js';
-import { findClip, barBeats, newNote } from '../core/project.js';
+import { findClip, barBeats, newNote, claimSpace } from '../core/project.js';
 import { hexA } from './arrangement.js';
 import { drumNoteName } from '../shared/drums.js';
 
@@ -323,7 +323,7 @@ export class PianoRoll {
         drag(e, { cursor: 'ew-resize', move: (ev) => {
           const nb = Math.max(0.25, this.snap(this.beat(this.local(ev).x), ev));
           app.store.live((q) => { const c = findClip(q, this.clipId).clip; const wasFull = (c.loopLen || c.length) >= c.length - 1e-6; c.loopLen = nb; if (wasFull) c.length = nb; }, 'notes', { clipId: this.clipId });
-        }, up: () => app.store.end('clips') });
+        }, up: () => { app.store.live((q) => { claimSpace(q, [this.clipId]); }, 'clips'); app.store.end('clips'); app.validateSelection(); } });
         return;
       }
       const loc = (xx) => app.locate(clip.start - (clip.offset || 0) + Math.max(0, this.snap(this.beat(xx))));

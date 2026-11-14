@@ -44,8 +44,8 @@ const PEXP = [[21, 2.2], [60, 2.6], [108, 3.1]]; // felt stiffness exponent
 const LOG_Z = [[21, Math.log(6)], [45, Math.log(3.5)], [60, Math.log(1.6)], [84, Math.log(1.2)], [108, Math.log(0.9)]]; // string impedance, kg/s
 const BETA = [[21, 0.125], [80, 0.115], [108, 0.07]]; // strike point (fraction of length)
 const T60I = [[21, 50], [48, 35], [60, 26], [72, 17], [84, 9], [96, 5], [108, 2.5]]; // aftersound (internal losses), s
-const T60P = [[21, 15], [48, 10], [60, 8], [72, 6], [84, 5], [96, 3.5], [108, 1.5]]; // prompt sound (bridge coupling), s
-const T60H = [[21, 0.9], [48, 1], [60, 1], [72, 1], [84, 1], [96, 0.6], [108, 0.3]]; // high partials, s
+const T60P = [[21, 17], [48, 12], [60, 10], [72, 7.5], [84, 5.5], [96, 3.8], [108, 1.6]]; // prompt sound (bridge coupling), s
+const T60H = [[21, 2.2], [48, 3], [60, 3.2], [72, 2.8], [84, 2], [96, 1.1], [108, 0.5]]; // partials near 2–4 kHz (measured grand: ~3 s mid-keyboard), s
 const T60D = [[21, 0.6], [48, 0.35], [72, 0.2], [88, 0.15]]; // damper on the string, s
 const DAMPER_TOP = 88; // as on a grand, the top strings have no dampers
 // soundboard modes (Hz, Q) and their stereo signs
@@ -65,6 +65,23 @@ const REG_DB = [
   [-7.8, -7.8, -4, -4, -3.5, -2.2, -2.4, -2, -1.2, 0.3, 2.3, 4.5, 7.1, 10.8, 11.8, 15.2], // Vintage Character
 ];
 const HYST = [[21, 6e-5], [60, 3e-5], [108, 1.2e-5]]; // felt hysteresis time (s): the felt pushes back harder while compressing than while recovering
+// longitudinal (tension-modulation) phantom partials: bridge force ≈ transverse + κ·(transverse)², strongest in the bass at forte
+const PH_REF = [[21, 0.06], [36, 0.031], [48, 0.023], [60, 0.0165], [72, 0.0103]]; // bridge velocity peak at full velocity
+const PH_K = [[21, 0.16], [40, 0.12], [55, 0.06], [70, 0]];
+// dense soundboard body: an 8-line Hadamard FDN (2–13 ms lines) gives the board its thousands of closely spaced modes
+const BD_D = [113, 167, 229, 293, 359, 431, 509, 601];
+const BD_SL = [1, -1, 1, 1, -1, 1, -1, 1], BD_SR = [1, 1, -1, 1, 1, -1, 1, -1];
+// velocity curves (exponent on normalized MIDI velocity): Soft, Normal, Hard (Custom uses its own exponent)
+const VCURVE = [0.6, 1, 1.6];
+// microphone perspectives: width, extra room send, reverb time scale, room size floor, air (distance) cutoff Hz, body (board) share, direct level
+const MICS = [
+  { w: 1.0, wet: 0.0, rt: 0.8, size: 0, air: 0, body: 0.8, dir: 1.12 }, // Close
+  { w: 0.85, wet: 0.04, rt: 1, size: 0, air: 16000, body: 1, dir: 1 }, // Player
+  { w: 0.55, wet: 0.2, rt: 1.25, size: 0.25, air: 7500, body: 1.25, dir: 0.82 }, // Audience
+  { w: 0.8, wet: 0.1, rt: 0.85, size: 0.1, air: 12000, body: 1.05, dir: 0.95 }, // Warm studio
+  { w: 0.65, wet: 0.3, rt: 2.2, size: 0.65, air: 8500, body: 1.2, dir: 0.78 }, // Concert hall
+];
+const ROOM_MAX = 2.3; // room delay lines scale up to this for the largest room
 const SYM_LO = 36, SYM_HI = 71; // the strings the sustain pedal frees to ring in sympathy (plus the undamped treble)
 
 class Voice {
@@ -78,7 +95,7 @@ class Voice {
     this.gd = 1; this.damp = 0; this.hasDamper = true; this.pan = 0; this.envB = 0; this.lvl = 0; this.age = 0;
     this.hOn = false; this.yh = 0; this.vh = 0; this.ys = 0; this.hF = 0; this.hm = 0.008; this.hK = 100; this.hp = 2.5; this.inv2Z = 0.1;
     this.hIdle = 0; this.hT = 0; this.t1 = 1; this.t2 = 2; this.quiet = 0; this.g = 1; this.gc = 1;
-    this.fading = false; this.fade = 1; this.pendKey = -1; this.pendVel = 0; this.pendOff = false;
+    this.fading = false; this.fade = 1; this.pendKey = -1; this.pendVel = 0; this.pendOff = false; this.phK = 0;
   }
 }
 
@@ -95,10 +112,10 @@ export class Piano {
     this.kN = new Int32Array(NK * MAXL); this.kEta = new Float64Array(NK * MAXL); this.kB0 = new Float64Array(NK * MAXL); this.kKap = new Float64Array(NK * MAXL);
     this.kAd = new Float64Array(NK); this.kM = new Int32Array(NK); this.kC = new Float64Array(NK); this.kNs = new Int32Array(NK);
     this.kGd = new Float64Array(NK); this.kT1 = new Int32Array(NK); this.kT2 = new Int32Array(NK); this.kI2Z = new Float64Array(NK);
-    this.kMass = new Float64Array(NK); this.kK = new Float64Array(NK); this.kP = new Float64Array(NK);
+    this.kMass = new Float64Array(NK); this.kK = new Float64Array(NK); this.kP = new Float64Array(NK); this.kPh = new Float64Array(NK);
     this.hdt = 1 / (sr * OS); this.hIdleMax = Math.round(0.002 * sr); this.hMaxT = Math.round(0.04 * sr);
     this.dampK = 1 - Math.exp(-1 / (0.008 * sr)); this.fadeStep = 1 / (0.004 * sr); this.gRamp = 1 - Math.exp(-1 / (0.0015 * sr));
-    this.livePedal = 0; this.rngS = 0x2f6b9a1d; this.thump = 0;
+    this.livePedal = 0; this.liveSoft = -1; this.liveUna = 0; this.rngS = 0x2f6b9a1d; this.thump = 0;
     this.bL = new Float64Array(256); this.bR = new Float64Array(256); this.bM = new Float64Array(256); this.bT = new Float64Array(256);
     // soundboard
     this.sbB = new Float64Array(NSB); this.sbA1 = new Float64Array(NSB); this.sbA2 = new Float64Array(NSB);
@@ -112,10 +129,14 @@ export class Piano {
     // output filters, room
     this.lpL = 0; this.lpR = 0; this.lpK = 1 - Math.exp(-TAU * 250 / sr);
     this.hpA = Math.exp(-TAU * 25 / sr); this.hxL = 0; this.hxR = 0; this.hyL = 0; this.hyR = 0;
-    let rs = 1; while (rs < ROOM_D[3] * sr / 48000 + 2) rs <<= 1;
+    let rs = 1; while (rs < ROOM_D[3] * ROOM_MAX * sr / 48000 + 2) rs <<= 1;
     this.rSize = rs; this.rBuf = new Float64Array(4 * rs); this.rp = 0;
     this.rD = new Int32Array(4); this.rG = new Float64Array(4); this.rZ = new Float64Array(4);
-    for (let i = 0; i < 4; i++) this.rD[i] = Math.round(ROOM_D[i] * sr / 48000);
+    this.rDamp = 0.45; this.air = 0; this.aL = 0; this.aR = 0; this.dirG = 1;
+    let bs = 1; while (bs < BD_D[7] * sr / 48000 + 2) bs <<= 1;
+    this.bdSize = bs; this.bdBuf = new Float64Array(8 * bs); this.bdP = 0; this.bdD = new Int32Array(8); this.bdZ = new Float64Array(8);
+    for (let i = 0; i < 8; i++) this.bdD[i] = Math.round(BD_D[i] * sr / 48000);
+    this.bdG = new Float64Array(8); this.bdLp = 0.5; this.bdOut = 0; this.bdX = new Float64Array(8);
     // sympathetic strings: a pedal bank (C2–B4, damped unless the pedal is down) and the undamped top strings
     const notes = [];
     for (let k = SYM_LO; k <= SYM_HI; k++) notes.push(k);
@@ -137,7 +158,7 @@ export class Piano {
   applyParam(i, v) {
     this.p[i] = v;
     if (i === I.model) { this.mi = clamp(Math.round(v), 0, PIANO_MODELS.length - 1); this.model = PIANO_MODELS[this.mi]; this.ver++; }
-    else if (i === I.tuning || i === I.bright || i === I.sustain) this.ver++;
+    else if (i === I.tuning || i === I.bright || i === I.sustain || i === I.real) this.ver++;
     this.dirty = true;
   }
   setParam(i, v) { this.manual[i] = v; if (!this.auto[i]) this.applyParam(i, v); }
@@ -155,6 +176,8 @@ export class Piano {
   modWheel() {}
   beginBlock() {}
   setPedal(v) { this.livePedal = clamp(v, 0, 1); }
+  setSoftPedal(v) { this.liveUna = clamp(v, 0, 1); } // MIDI CC67 (una corda)
+  setSoftness(v) { this.liveSoft = v < 0 ? -1 : clamp(v, 0, 1); } // expression pedal → Softness (−1: follow the knob)
   rand() { let x = this.rngS; x ^= x << 13; x ^= x >>> 17; x ^= x << 5; this.rngS = x; return (x >>> 0) / 4294967296; }
 
   // live coefficients: soundboard modes, room, output gain
@@ -162,6 +185,7 @@ export class Piano {
     this.dirty = false;
     const m = this.model, p = this.p, sr = this.sr;
     const res = p[I.sbres], warm = p[I.warmth], w = p[I.width];
+    const w0 = w; { const w = w0 * this.micWidth(); 
     for (let i = 0; i < NSB; i++) {
       const f = SB_F[i] * m.sbScale, Q = SB_Q[i] * m.sbQ * (0.6 + 0.8 * res);
       if (f > 0.45 * sr) { this.sbB[i] = 0; this.sbGL[i] = 0; this.sbGR[i] = 0; continue; }
@@ -169,16 +193,30 @@ export class Piano {
       this.sbA1[i] = 2 * r * Math.cos(TAU * f / sr); this.sbA2[i] = -r * r; this.sbB[i] = (1 - r * r) / 2;
       const g = (1.2 * res * m.sbGain / Math.sqrt(1 + 0.5 * i)) * (i < 4 ? m.low * (0.4 + 1.6 * warm) : 1);
       this.sbGL[i] = g * (1 - w + w * SB_SL[i]); this.sbGR[i] = g * (1 - w + w * SB_SR[i]);
-    }
+    } }
     this.warmG = (warm - 0.5) * 1.2;
-    const rt = 0.5 + 0.9 * p[I.room];
+    const mic = MICS[clamp(Math.round(p[I.mic]), 0, MICS.length - 1)];
+    const size = Math.max(p[I.rsize], mic.size), scale = 0.6 + (ROOM_MAX - 0.6) * size;
+    for (let i = 0; i < 4; i++) this.rD[i] = Math.min(this.rSize - 2, Math.round(ROOM_D[i] * scale * sr / 48000));
+    const rt = (0.5 + 0.9 * p[I.room]) * mic.rt * (0.7 + 0.6 * size);
     for (let i = 0; i < 4; i++) this.rG[i] = Math.pow(10, -3 * this.rD[i] / (sr * rt));
-    this.wet = p[I.room] * 0.32;
+    this.rDamp = 0.3 + 0.25 * (1 - size); // bigger rooms keep more top end in their tail
+    this.wet = Math.min(0.6, p[I.room] * 0.32 + mic.wet);
+    this.air = mic.air > 0 ? 1 - Math.exp(-TAU * Math.min(mic.air, 0.45 * sr) / sr) : 0;
+    this.dirG = mic.dir; this.micW = mic.w;
+    // dense board: decay ~90 ms in the lows, faster up top (one-pole in each line)
+    const bt = 0.09 * m.sbQ * (0.7 + 0.6 * res);
+    for (let i = 0; i < 8; i++) this.bdG[i] = Math.pow(10, -3 * this.bdD[i] / (sr * bt));
+    this.bdLp = 1 - Math.exp(-TAU * 3500 * m.sbScale / sr);
+    this.bdOut = 0.55 * res * m.sbGain * mic.body;
     this.kIn = 0.012 * p[I.sres]; this.kOut = 0.32;
     if (this.sVer !== this.ver) this.tuneBank();
     this.outG = OUT * Math.pow(2, (p[I.sustain] - 0.5) * 2.0); // a shorter sustain drains the strings faster (louder): keep the level steady
     this.lev = Math.pow(10, p[I.level] / 20);
   }
+
+  micWidth() { return MICS[clamp(Math.round(this.p[I.mic]), 0, MICS.length - 1)].w; }
+  softness() { return this.liveSoft >= 0 ? Math.max(this.p[I.soft], this.liveSoft) : this.p[I.soft]; }
 
   // ------------------------------------------------------------ per-key physics
   // stretched tuning (+ wandering pitch on a vintage piano)
@@ -205,7 +243,7 @@ export class Piano {
     this.sVer = this.ver;
   }
   fitKey(k) {
-    const n = k + LO, sr = this.sr, m = this.model, p = this.p, tune = p[I.tuning], irr = m.irr;
+    const n = k + LO, sr = this.sr, m = this.model, p = this.p, tune = p[I.tuning], irr = m.irr, real = p[I.real];
     const h1 = hash(n, 1), h2 = hash(n, 2), h3 = hash(n, 3);
     const f1 = this.keyF(n), w1 = TAU * f1 / sr;
     void h1;
@@ -278,13 +316,14 @@ export class Piano {
     this.kT1[k] = t1; this.kT2[k] = t2;
     const tr = clamp((n - 80) / 16, 0, 1); // top-octave hammers are tiny and very hard, so they leave the short strings quickly
     this.kMass[k] = curve(n, MASS) * m.mass * (1 - 0.65 * tr);
-    this.kK[k] = Math.exp(curve(n, LOG_K)) * m.k0 * (1 + 0.25 * irr * h3) * (1 + 9 * tr);
+    this.kK[k] = Math.exp(curve(n, LOG_K)) * m.k0 * (1 + (0.25 * irr + 0.12 * real) * h3) * (1 + 9 * tr); // no two hammers are voiced quite alike
     const reg = REG_DB[this.mi] || REG_DB[0];
     this.kG[k] = Math.pow(10, curve(n, REG_KEYS.map((x, i) => [x, reg[i]])) / 20); // voicing: even loudness across the registers
     this.kP[k] = curve(n, PEXP) + m.p;
     this.kI2Z[k] = 1 / (2 * Math.exp(curve(n, LOG_Z)) * ns);
     this.kAd[k] = ad; this.kM[k] = M; this.kC[k] = c; this.kNs[k] = ns;
     this.kGd[k] = n > DAMPER_TOP ? 1 : Math.pow(10, -3 / (f1 * curve(n, T60D) / m.damp));
+    this.kPh[k] = curve(n, PH_K) / curve(n, PH_REF);
     this.kVer[k] = this.ver;
   }
 
@@ -294,7 +333,7 @@ export class Piano {
       if (hard) { v.active = false; v.fading = false; } else { v.keyDown = false; v.pendOff = true; }
     }
     if (hard) { // silence everything: strings, resonance, body and room
-      this.livePedal = 0; this.sBuf.fill(0); this.sThz.fill(0); this.sLz.fill(0); this.rBuf.fill(0); this.rZ.fill(0);
+      this.livePedal = 0; this.liveUna = 0; this.bdBuf.fill(0); this.bdZ.fill(0); this.aL = this.aR = 0; this.sBuf.fill(0); this.sThz.fill(0); this.sLz.fill(0); this.rBuf.fill(0); this.rZ.fill(0);
       this.sbY1.fill(0); this.sbY2.fill(0); this.thY.fill(0); this.sbX1 = this.sbX2 = 0; this.thump = 0;
     }
   }
@@ -305,8 +344,10 @@ export class Piano {
       if (v.fading && v.pendKey === n) v.pendOff = true;
     }
   }
-  noteOn(note, vel) {
+  // live: a note played on a MIDI controller, shaped by the velocity curve (generated parts already speak the piano's language)
+  noteOn(note, vel, live) {
     let n = note; while (n < LO) n += 12; while (n > HI) n -= 12;
+    if (live) { const ci = Math.round(this.p[I.vcurve]); vel = Math.pow(clamp(vel, 0, 1), ci >= 3 ? this.p[I.vgamma] : VCURVE[clamp(ci, 0, 2)]); }
     vel = clamp(vel, 0.01, 1);
     for (const v of this.voices) if (v.active && !v.fading && v.key === n) { this.strike(v, vel); return; } // same strings, still moving
     let best = null, score = Infinity;
@@ -330,22 +371,28 @@ export class Piano {
     v.ns = ns; v.nl = nl; v.M = this.kM[k]; v.ad = this.kAd[k]; v.c = this.kC[k]; v.gd = this.kGd[k];
     v.t1 = this.kT1[k]; v.t2 = this.kT2[k]; v.hm = this.kMass[k]; v.inv2Z = this.kI2Z[k];
     v.hasDamper = n <= DAMPER_TOP; v.pan = clamp((n - 64.5) / 44, -1, 1); v.g = this.kG[k]; v.gc = Math.min(1, v.g);
-    v.key = n; v.wp = 0; v.damp = 0; v.age = 0; v.lvl = 1; v.envB = 0; v.quiet = 0;
+    v.phK = this.kPh[k]; v.key = n; v.wp = 0; v.damp = 0; v.age = 0; v.lvl = 1; v.envB = 0; v.quiet = 0;
     v.active = true; v.fading = false; v.fade = 1;
     this.strike(v, vel);
   }
   strike(v, vel) {
-    const k = v.key - LO, p = this.p, dyn = p[I.dyn], hard = p[I.hard];
+    const k = v.key - LO, p = this.p, dyn = p[I.dyn], hard = p[I.hard], m = this.model, real = 2 * p[I.real];
+    const soft = this.softness(), una = Math.max(p[I.una], this.liveUna, m.una || 0);
     const lo = 6 * Math.pow(10, -(0.6 + 1.2 * dyn)); // softest hammer speed, m/s (loudest 6 m/s): 12–36 dB of range
-    const v0 = lo * Math.pow(6 / lo, vel) * (1 + 0.03 * (this.rand() - 0.5));
-    v.hK = this.kK[k] * Math.pow(2, (hard - 0.5) * 3); v.hp = this.kP[k] + (hard - 0.5) * 0.4;
-    v.yh = 0; v.vh = v0; v.ys = 0; v.hF = 0; v.hOn = true; v.hIdle = 0; v.hT = 0;
-    v.hCp = 0; v.hEps = (curve(v.key, HYST) * (this.model.hyst ?? 1)) / this.hdt;
-    const irr = this.model.irr;
-    for (let i = 0; i < v.nl; i++) v.ex[i] = v.ns === 1 && i === 1 ? 0.08 + 0.06 * this.rand() : 1 + 0.08 * (1 + irr) * (this.rand() - 0.5);
+    const v0 = lo * Math.pow(6 / lo, vel) * (1 + 0.03 * real * (this.rand() - 0.5));
+    // Softness lays a felt strip over the hammer: much softer, more yielding felt (lower K and exponent, more hysteresis), slightly heavier.
+    // Una corda shifts the action: the hammer meets fewer strings with the unworn, softer part of its felt.
+    v.hK = this.kK[k] * Math.pow(2, (hard - 0.5) * 3) * Math.pow(0.035, soft) * (1 - 0.6 * una) * (1 + 0.04 * real * (this.rand() - 0.5));
+    v.hp = Math.max(1.6, this.kP[k] + (hard - 0.5) * 0.4 - 0.55 * soft - 0.3 * una);
+    v.hm = this.kMass[k] * (1 + 0.12 * soft);
+    v.yh = 0; v.vh = v0 * (1 + 0.35 * soft); v.ys = 0; v.hF = 0; v.hOn = true; v.hIdle = 0; v.hT = 0; // the strip absorbs energy: the player digs in a little
+    v.hCp = 0; v.hEps = (curve(v.key, HYST) * (m.hyst ?? 1) * (1 + 3 * soft)) / this.hdt;
+    const irr = m.irr;
+    for (let i = 0; i < v.nl; i++) v.ex[i] = v.ns === 1 && i === 1 ? 0.08 + 0.06 * this.rand() : 1 + 0.08 * (irr + real) * (this.rand() - 0.5);
+    if (una > 0) { if (v.ns === 3) v.ex[2] *= 1 - 0.95 * una; else if (v.ns === 2) v.ex[1] *= 1 - 0.7 * una; } // the unstruck string still rings through the bridge
     v.keyDown = true; v.lvl = 1;
     const q = v0 / 6;
-    this.thump += 0.024 * p[I.mech] * this.model.mech * q * Math.sqrt(q);
+    this.thump += 0.024 * p[I.mech] * m.mech * (0.5 + 0.5 * real) * (1 - 0.5 * soft) * q * Math.sqrt(q);
   }
 
   // implicit hammer–string contact for one output sample; returns the velocity wave sent into each string
@@ -387,9 +434,9 @@ export class Piano {
     const ped = this.p[I.pedal] > this.livePedal ? this.p[I.pedal] : this.livePedal;
     const x = clamp((ped - 0.2) / 0.6, 0, 1), lift = x * x * (3 - 2 * x); // half-pedal: dampers lift gradually
     if (lift > 0.5 && this.lift <= 0.5) this.pedNoise = true; // the dampers leave the strings…
-    else if (lift < 0.5 && this.lift >= 0.5) this.thump += 0.006 * this.p[I.mech] * this.model.mech; // …and land again
+    else if (lift < 0.5 && this.lift >= 0.5) this.thump += 0.012 * this.p[I.pnoise] * this.model.mech; // …and land again
     this.lift = lift;
-    const pw = 0.3 + 0.7 * this.p[I.width];
+    const pw = (0.3 + 0.7 * this.p[I.width]) * this.micWidth();
     for (let i = 0; i < MAXV; i++) {
       const v = this.voices[i];
       if (!v.active) continue;
@@ -412,9 +459,9 @@ export class Piano {
     if (to <= from) return;
     const buf = v.buf, mask = v.mask, size = v.size, nl = v.nl, ns = v.ns, M = v.M, ad = v.ad, c = v.c;
     const N = v.N, eta = v.eta, thz = v.thz, ds = v.ds, lz = v.lz, b0 = v.b0, kap = v.kap, ex = v.ex, y = v.y;
-    const dT = v.keyDown || !v.hasDamper ? 0 : 1 - lift, dk = this.dampK, gdm = 1 - v.gd;
+    const dT = v.keyDown || !v.hasDamper ? 0 : Math.pow(1 - lift, 2.5), dk = this.dampK, gdm = 1 - v.gd; // half-pedal: dampers that only graze the strings damp them gently
     const pan = v.pan * pw, pl = Math.cos((pan + 1) * Math.PI / 4) * Math.SQRT2, pr = Math.sin((pan + 1) * Math.PI / 4) * Math.SQRT2;
-    const bL = this.bL, bR = this.bR, bM = this.bM, g = this.outG, gr = this.gRamp, fstep = v.fading ? this.fadeStep : 0;
+    const phK = v.phK, bL = this.bL, bR = this.bR, bM = this.bM, g = this.outG, gr = this.gRamp, fstep = v.fading ? this.fadeStep : 0;
     let wp = v.wp, damp = v.damp, env = v.envB, fade = v.fade;
     for (let s = from; s < to; s++) {
       damp += (dT - damp) * dk;
@@ -439,6 +486,7 @@ export class Piano {
       for (let i = 0; i < nl; i++) buf[i * size + wp] = (y[i] - vj) * gl; // bridge junction (+ damper)
       wp = (wp + 1) & mask;
       v.gc += (v.g - v.gc) * gr; // a treble boost fades in over ~1.5 ms so it lifts the tone, not the hammer click
+      if (phK) vj += phK * vj * vj; // tension modulation → phantom partials (DC is removed at the output)
       let out = vj * g * v.gc;
       if (fstep) { fade -= fstep; if (fade < 0) fade = 0; out *= fade; }
       const a = out < 0 ? -out : out; if (a > env) env = a;
@@ -452,7 +500,9 @@ export class Piano {
     const bL = this.bL, bR = this.bR, bM = this.bM, bT = this.bT, th = this.th, ty = this.thY;
     const sbB = this.sbB, a1 = this.sbA1, a2 = this.sbA2, gL = this.sbGL, gR = this.sbGR, y1 = this.sbY1, y2 = this.sbY2;
     const rb = this.rBuf, rs = this.rSize, rm = rs - 1, rD = this.rD, rG = this.rG, rZ = this.rZ, wet = this.wet;
-    const lev = this.lev, wg = this.warmG, lk = this.lpK, ha = this.hpA;
+    const lev = this.lev, wg = this.warmG, lk = this.lpK, ha = this.hpA, rdp = this.rDamp, air = this.air, dirG = this.dirG;
+    const bb = this.bdBuf, bsz = this.bdSize, bmk = bsz - 1, bD = this.bdD, bG = this.bdG, bZ = this.bdZ, bX = this.bdX, blp = this.bdLp, bOut = this.bdOut;
+    let bp = this.bdP;
     let x1 = this.sbX1, x2 = this.sbX2, rp = this.rp;
     // sympathetic strings: the keys being played are already real voices, so their own bank strings take no input
     const NS = this.NS, NP = this.NP, sBuf = this.sBuf, sOff = this.sOff, sMask = this.sMask, sN = this.sN, sEta = this.sEta, sThz = this.sThz;
@@ -463,7 +513,7 @@ export class Piano {
       sGate.fill(0);
       for (let i = 0; i < MAXV; i++) { const v = this.voices[i]; if (v.active) { const j = v.key >= SYM_LO && v.key <= SYM_HI ? v.key - SYM_LO : v.key > DAMPER_TOP ? NP + v.key - DAMPER_TOP - 1 : -1; if (j >= 0) sGate[j] = 1; } }
       if (this.pedNoise) { // lifting the dampers brushes every string: a soft wash at their pitches
-        const amp = 0.0064 * this.p[I.mech] * this.model.mech;
+        const amp = 0.0128 * this.p[I.pnoise] * this.model.mech;
         for (let i = 0; i < NP; i++) for (let k = 1; k <= sN[i]; k++) sBuf[sOff[i] + ((sw - k) & sMask[i])] += (this.rand() - 0.5) * amp;
       }
       this.symIdle = lift < 0.002 && liftS < 0.002 ? this.symIdle + n : 0;
@@ -479,13 +529,14 @@ export class Piano {
       let syl = 0, syr = 0;
       if (sym) {
         liftS += (lift - liftS) * dk;
+        const dmp = Math.pow(1 - liftS, 2.5);
         const inp = kIn * m;
         for (let i = skipP ? NP : 0; i < NS; i++) {
           const off = sOff[i], mk = sMask[i];
           let xx = sBuf[off + ((sw - sN[i]) & mk)];
           const o = sEta[i] * xx + sThz[i]; sThz[i] = xx - sEta[i] * o;
           xx = sB0[i] * o + 0.3 * sLz[i]; sLz[i] = xx;
-          sBuf[off + (sw & mk)] = xx * (i < NP ? 1 - (1 - liftS) * sGdm[i] : 1) + (sGate[i] ? 0 : inp);
+          sBuf[off + (sw & mk)] = xx * (i < NP ? 1 - dmp * sGdm[i] : 1) + (sGate[i] ? 0 : inp);
           syl += xx * sGL[i]; syr += xx * sGR[i];
         }
         sw = (sw + 1) & 0x3fffffff;
@@ -498,15 +549,24 @@ export class Piano {
         y2[i] = y1[i]; y1[i] = yy; sl += gL[i] * yy; sr += gR[i] * yy;
       }
       x2 = x1; x1 = m;
-      let l = bL[s] + 0.5 * knock + sl + syl, r = bR[s] + 0.5 * knock + sr + syr; bL[s] = 0; bR[s] = 0;
+      // dense board body: the bridge drives an 8-line FDN whose outputs radiate decorrelated to left and right
+      let dl = 0, dr = 0;
+      for (let j = 0; j < 8; j++) { const z = (bZ[j] += blp * (bb[j * bsz + ((bp - bD[j]) & bmk)] - bZ[j])); bX[j] = z * bG[j]; dl += BD_SL[j] * z; dr += BD_SR[j] * z; }
+      { const a0 = bX[0] + bX[1], a1 = bX[0] - bX[1], a2 = bX[2] + bX[3], a3 = bX[2] - bX[3], a4 = bX[4] + bX[5], a5 = bX[4] - bX[5], a6 = bX[6] + bX[7], a7 = bX[6] - bX[7];
+        const c0 = a0 + a2, c1 = a1 + a3, c2 = a0 - a2, c3 = a1 - a3, c4 = a4 + a6, c5 = a5 + a7, c6 = a4 - a6, c7 = a5 - a7, hn = 0.35355339059, bi = 0.25 * (m - x2);
+        bb[bp] = (c0 + c4) * hn + bi; bb[bsz + bp] = (c1 + c5) * hn - bi; bb[2 * bsz + bp] = (c2 + c6) * hn + bi; bb[3 * bsz + bp] = (c3 + c7) * hn - bi;
+        bb[4 * bsz + bp] = (c0 - c4) * hn + bi; bb[5 * bsz + bp] = (c1 - c5) * hn - bi; bb[6 * bsz + bp] = (c2 - c6) * hn + bi; bb[7 * bsz + bp] = (c3 - c7) * hn - bi; }
+      bp = (bp + 1) & bmk;
+      let l = (bL[s] + 0.5 * knock) * dirG + sl + syl + bOut * dl, r = (bR[s] + 0.5 * knock) * dirG + sr + syr + bOut * dr; bL[s] = 0; bR[s] = 0;
       this.lpL += lk * (l - this.lpL); l += wg * this.lpL;
       this.lpR += lk * (r - this.lpR); r += wg * this.lpR;
       const hl = ha * (this.hyL + l - this.hxL); this.hxL = l; this.hyL = hl;
       const hr = ha * (this.hyR + r - this.hxR); this.hxR = r; this.hyR = hr;
       l = hl; r = hr;
+      if (air) { this.aL += air * (l - this.aL); this.aR += air * (r - this.aR); l = this.aL; r = this.aR; } // distance: air absorbs the top
       if (wet > 0) { // small room: 4-line feedback delay network
-        const z0 = (rZ[0] += 0.45 * (rb[(rp - rD[0]) & rm] - rZ[0])), z1 = (rZ[1] += 0.45 * (rb[rs + ((rp - rD[1]) & rm)] - rZ[1]));
-        const z2 = (rZ[2] += 0.45 * (rb[2 * rs + ((rp - rD[2]) & rm)] - rZ[2])), z3 = (rZ[3] += 0.45 * (rb[3 * rs + ((rp - rD[3]) & rm)] - rZ[3]));
+        const z0 = (rZ[0] += rdp * (rb[(rp - rD[0]) & rm] - rZ[0])), z1 = (rZ[1] += rdp * (rb[rs + ((rp - rD[1]) & rm)] - rZ[1]));
+        const z2 = (rZ[2] += rdp * (rb[2 * rs + ((rp - rD[2]) & rm)] - rZ[2])), z3 = (rZ[3] += rdp * (rb[3 * rs + ((rp - rD[3]) & rm)] - rZ[3]));
         const inp = 0.35 * (l + r);
         rb[rp] = inp + 0.5 * (z0 + z1 + z2 + z3) * rG[0];
         rb[rs + rp] = inp + 0.5 * (z0 - z1 + z2 - z3) * rG[1];
@@ -520,7 +580,7 @@ export class Piano {
       if (r > 0.7 || r < -0.7) r = r > 0 ? 0.7 + 0.3 * Math.tanh((r - 0.7) / 0.3) : -0.7 - 0.3 * Math.tanh((-r - 0.7) / 0.3);
       L[s] += l; R[s] += r;
     }
-    this.sbX1 = x1; this.sbX2 = x2; this.rp = rp; this.sW = sw; this.liftS = liftS;
+    this.sbX1 = x1; this.sbX2 = x2; this.rp = rp; this.bdP = bp; this.sW = sw; this.liftS = liftS;
     // retire voices that have died away
     let act = 0;
     for (let i = 0; i < MAXV; i++) {

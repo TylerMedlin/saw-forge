@@ -22,7 +22,11 @@ const SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 const FLAT_KEYS = new Set([5, 10, 3, 8, 1, 6]); // F Bb Eb Ab Db Gb (major)
 export const KEY_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
-export const pcName = (pc, key = 0, minor = false) => (FLAT_KEYS.has(((minor ? key + 3 : key) % 12 + 12) % 12) ? FLAT : SHARP)[((pc % 12) + 12) % 12];
+export const pcName = (pc, key = 0, minor = false) => {
+  const q = ((pc % 12) + 12) % 12;
+  if (minor && q === ((key + 11) % 12 + 12) % 12) return SHARP[q]; // the raised leading tone: F# in G minor, not Gb
+  return (FLAT_KEYS.has(((minor ? key + 3 : key) % 12 + 12) % 12) ? FLAT : SHARP)[q];
+};
 const LETTER = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 const MAJ = [0, 2, 4, 5, 7, 9, 11], NMIN = [0, 2, 3, 5, 7, 8, 10];
 export const scaleOf = (key, minor) => (minor ? NMIN : MAJ).map((x) => (x + key) % 12);
@@ -111,6 +115,63 @@ export function parseProgression(str, key = 0, minor = false, barLen = 4) {
   return { segs, bars: bar };
 }
 
+// ----------------------------------------------------------------- re-keying
+// Move chords to a new key and/or mode. Same mode: a plain transposition. Major ↔ minor: every chord keeps
+// its scale degree and takes the new mode's diatonic quality (G D Em C in G major → Gm D Eb Cm in G minor),
+// so the progression keeps its shape. Chromatic chords (secondary dominants, borrowed chords) keep their
+// quality and follow their root; slash basses follow the chord tone they were (D/F# → D/F# stays a 1st inversion).
+const FAMILY = {
+  '': ['M', ''], maj: ['M', ''], M: ['M', ''], m: ['m', ''], min: ['m', ''], '-': ['m', ''], dim: ['d', ''], o: ['d', ''], '°': ['d', ''],
+  add9: ['M', 'add9'], add2: ['M', 'add9'], madd9: ['m', 'add9'], 6: ['M', '6'], m6: ['m', '6'], '6/9': ['M', '69'], 69: ['M', '69'],
+  7: ['M', '7'], maj7: ['M', '7'], M7: ['M', '7'], 'Δ': ['M', '7'], m7: ['m', '7'], '-7': ['m', '7'], m7b5: ['d', '7'], 'ø': ['d', '7'],
+  9: ['M', '9'], maj9: ['M', '9'], m9: ['m', '9'], 11: ['M', '11'], m11: ['m', '11'], 13: ['M', '13'], maj13: ['M', '13'], m13: ['m', '13'],
+  add11: ['M', 'add11'], madd11: ['m', 'add11'],
+};
+const DIA_TRI = { false: ['M', 'm', 'm', 'M', 'M', 'm', 'd'], true: ['m', 'd', 'M', 'm', 'm', 'M', 'M'] };
+// which degrees carry a dominant (flat) seventh in each mode: V in major; v and VII in natural minor
+const DIA_DOM = { false: [4], true: [4, 6] };
+function buildSuf(tri, ext, deg, minor) {
+  const dom = DIA_DOM[minor].includes(deg);
+  if (tri === 'd') return ext === '' ? 'dim' : ext === 'dim7' ? 'dim7' : 'm7b5';
+  if (tri === 'm') return { '': 'm', add9: 'madd9', 6: 'm6', 69: 'm6', 7: 'm7', 9: 'm9', 11: 'm11', 13: 'm13', add11: 'madd11', dim7: 'm7' }[ext] ?? 'm';
+  return { '': '', add9: 'add9', 6: '6', 69: '6/9', 7: dom ? '7' : 'maj7', 9: dom ? '9' : 'maj9', 11: dom ? '11' : 'maj9', 13: dom ? '13' : 'maj13', add11: 'add11', dim7: '7' }[ext] ?? '';
+}
+const ROMAN_RE = /^[#b]?(VII|VI|V|IV|III|II|I|vii|vi|v|iv|iii|ii|i)/;
+export function rekeyChord(sym, k0, m0, k1, m1) {
+  const raw = String(sym || '').trim();
+  if (!raw || /^(%|\.|n\.?c\.?|_|x|-)$/i.test(raw) || ROMAN_RE.test(raw)) return raw; // Roman numerals already read in the new key
+  const c = parseChord(raw, k0, m0);
+  if (!c) return raw;
+  const shift = k1 - k0, sc0 = m0 ? NMIN : MAJ, sc1 = m1 ? NMIN : MAJ;
+  const mv = (pc) => ((pc + shift) % 12 + 12) % 12;
+  if (!!m0 === !!m1) return chordName({ root: mv(c.root), suf: c.suf, bass: c.bass == null ? null : mv(c.bass) }, k1, m1);
+  const deg = sc0.indexOf((c.root - k0 + 12) % 12);
+  const pcs = c.iv.map((x) => (x + c.root) % 12), dia = pcs.every((p) => sc0.includes((p - k0 + 12) % 12));
+  const fam = FAMILY[c.suf];
+  let root, suf;
+  if (deg >= 0) root = (k1 + sc1[deg]) % 12; else root = mv(c.root);
+  if (deg >= 0 && dia && fam) {
+    let tri = DIA_TRI[!!m1][deg];
+    if (m1 && deg === 4 && fam[0] === 'M') tri = 'M'; // a major V stays the dominant (harmonic minor)
+    suf = buildSuf(tri, fam[1], deg, !!m1);
+  } else suf = c.suf;
+  let bass = null;
+  if (c.bass != null) {
+    const iv = (c.bass - c.root + 12) % 12, niv = (QUALITIES[suf] || c.iv).map((x) => x % 12);
+    const like = (set) => (set.includes(iv) ? niv.find((x) => set.includes(x)) : undefined);
+    const t = like([3, 4]) ?? like([6, 7, 8]) ?? like([9, 10, 11]);
+    if (t !== undefined) bass = (root + t) % 12;
+    else { const bd = sc0.indexOf((c.bass - k0 + 12) % 12); bass = bd >= 0 ? (k1 + sc1[bd]) % 12 : mv(c.bass); }
+  }
+  return chordName({ root, suf, bass: bass === root ? null : bass }, k1, m1);
+}
+export const rekeyChords = (chords, k0, m0, k1, m1) => chords.map(([s, d]) => [rekeyChord(s, k0, m0, k1, m1), d]);
+// Progression text ("G D/F# Em7,C:1 | %"): every chord re-keyed, bar layout, weights and rests kept
+export function rekeyProgression(str, k0, m0, k1, m1) {
+  return String(str || '').split(/(\s+|\|)/).map((tok) => (!tok || /^(\s+|\|)$/.test(tok) ? tok
+    : tok.split(',').map((pt) => { const m = /^(.*?)(:\d+(?:\.\d+)?)?$/.exec(pt); return rekeyChord(m[1], k0, m0, k1, m1) + (m[2] || ''); }).join(','))).join('');
+}
+
 // ----------------------------------------------------------------- personalities & styles
 // ext: how often each colour is added; lh: left-hand figure weights; open: split
 // voicings between hands; jump: tolerance for wide voice-leading moves; reg:
@@ -142,6 +203,11 @@ export const PIANISTS = [
   PZ('songwriter', 'The Singer-Songwriter', '#b7d77a', 'Natural, restrained accompaniment that leaves room for a lead vocal.', {
     ext: { sev: 0.1, nine: 0.05, add9: 0.3, sus: 0.3, high: 0 }, lh: { root: 0.5, octave: 0.3, fifth: 0.2 }, open: 0.3, jump: 0.2, reg: 62, density: 0.4, legato: 0.8, push: -0.05, roll: 0.2, vel: 0.5, swing: 0, inv: 0.4,
     emb: { grace: 0.05, approach: 0.05, walk: 0.12, run: 0, antic: 0.2, oct: 0, sub: 0 }, def: { style: 'ballad', cx: 0.3, energy: 0.4, hum: 0.4 } }),
+  // Indie folk in the spirit of Noah Kahan's "End of August", Pinegrove's "Need 2" and Bon Iver: a high, twinkling
+  // ostinato over a held bass, open add9/sus voicings with a ringing common tone, plagal IV–I motion, slow builds.
+  PZ('folk', 'The Folk Pianist', '#d9a066', 'Twinkling high ostinatos over a held bass, open add9 and sus voicings, guitar-like strums and slow late-summer builds.', {
+    ext: { sev: 0.06, nine: 0.15, add9: 0.75, sus: 0.5, high: 0.18 }, lh: { root: 0.35, fifth: 0.4, octave: 0.25 }, open: 0.8, jump: 0.12, reg: 72, density: 0.45, legato: 0.92, push: -0.06, roll: 0.15, vel: 0.46, swing: 0, inv: 0.45,
+    emb: { grace: 0.12, approach: 0.04, walk: 0.1, run: 0, antic: 0.25, oct: 0.2, sub: 0 }, def: { style: 'twinkle', cx: 0.35, energy: 0.35, hum: 0.45 } }),
 ];
 export const pianistById = (id) => PIANISTS.find((p) => p.id === id) || PIANISTS[0];
 export const STYLES = [
@@ -149,6 +215,7 @@ export const STYLES = [
   { id: 'comp', name: 'Rhythmic Comping' }, { id: 'ballad', name: 'Gentle Ballad' }, { id: 'eighths', name: 'Driving Eighth Notes' },
   { id: 'rolling', name: 'Rolling Piano' }, { id: 'minimal', name: 'Minimalist' }, { id: 'fills', name: 'Melodic Fills' },
   { id: 'runs', name: 'Gospel Runs' }, { id: 'ambient', name: 'Ambient Worship' }, { id: 'build', name: 'Dynamic Build' },
+  { id: 'twinkle', name: 'Twinkling Ostinato' }, { id: 'strum', name: 'Strummed Folk' },
 ];
 const STYLE_IDS = STYLES.map((s) => s.id);
 
@@ -351,6 +418,34 @@ const STYLE_FN = {
     for (let t = 0, i = 0; t < L - 1e-6; t += step, i++) x.rhHit(t0 + t, step * 0.9, (t % 1 === 0 ? 0.95 : 0.75) * (0.85 + 0.3 * (t / L)));
     if (lvl > 0.9 && x.next) x.run(t0 + L - 1, 1, true);
   },
+  twinkle(x) { // folk: a high eighth-note ostinato that keeps returning to a ringing top note, over a held bass
+    const { V, t0, L, r } = x;
+    x.lhHit(t0, L, 0.85);
+    if (L >= 3 && x.dens > 0.4) x.add(V.lh[0] + 7, t0 + 2, L - 2, x.vb * 0.5, 0); // a soft fifth on beat 3
+    if (x.rest) return;
+    const lift = x.energy > 0.6 ? 12 : 0; // fuller sections climb an octave
+    const pool = [...new Set(V.rh.map((p) => p + lift))].filter((p) => p <= 98).sort((a, b) => a - b);
+    const topN = pool[pool.length - 1], inner = pool.length > 1 ? pool.slice(0, -1) : [pool[0] - 5];
+    const shape = r() < 0.5 ? [inner[0], topN, inner[1 % inner.length], topN] : [topN, inner[0], inner[inner.length - 1], inner[0]];
+    const step = x.dens < 0.3 ? 1 : x.energy > 0.78 && x.tempo < 120 ? 0.25 : 0.5;
+    for (let t = 0, i = 0; t < L - 1e-6; t += step, i++) {
+      const p = shape[i % shape.length], beat = Math.abs(t - Math.round(t)) < 1e-6;
+      x.add(p, t0 + t, step * 2.2, x.vb * (p === topN ? 0.58 : 0.66) * (beat ? 1.05 : 0.92), 1); // notes ring into each other (pedal down)
+    }
+  },
+  strum(x) { // folk: piano played like a strummed guitar — alternating bass, down-strokes on the chord, up-strokes on the top strings
+    const { V, t0, L } = x;
+    const alt = V.bass + 7 < V.rh[0] - 1 ? V.bass + 7 : V.bass - 5;
+    for (let t = 0; t < L - 1e-6; t += 2) x.add(t % 4 === 0 ? V.bass : alt, t0 + t, Math.min(2, L - t), x.vb * (t % 4 ? 0.7 : 0.88), 0, t === 0);
+    const pat = x.dens < 0.35 ? [[0, 1], [2, 0.9]]
+      : x.dens < 0.65 ? [[0, 1], [1, 0.82], [1.5, -0.6], [2.5, -0.62], [3, 0.85], [3.5, -0.6]]
+      : [[0, 1], [0.5, -0.55], [1, 0.82], [1.5, -0.6], [2, 0.92], [2.5, -0.6], [3, 0.82], [3.5, -0.62]];
+    for (const [t, k] of pat) {
+      if (t >= L - 1e-6) continue;
+      if (k > 0) x.rhHit(t0 + t, 0.9, k);
+      else if (!x.rest) V.rh.slice(-2).forEach((p) => x.add(p, t0 + t, 0.4, x.vb * -k, 1));
+    }
+  },
 };
 
 // ----------------------------------------------------------------- generation
@@ -410,7 +505,7 @@ export function generatePianist(settings, length, barLen = 4, ctx = null) {
       segT0 = t0; segBass = V.bass; segTop = V.top; segV = V;
       const vb = (0.28 + 0.55 * energy) * (0.75 + 0.5 * P.vel);
       const x = {
-        V, t0, L, r, P, s, add, energy, dens, cx: s.cx, tempo, vb, gr, off: g.off, next, phraseEnd: phraseEnd && gi === segs.length - 1,
+        V, t0, L, r, P, s, add, energy, rest, dens, cx: s.cx, tempo, vb, gr, off: g.off, next, phraseEnd: phraseEnd && gi === segs.length - 1,
         kicks: gr && gr.k.length ? gr.k.filter((k) => k >= g.off - 1e-6 && k < g.off + L - 1e-6).map((k) => k - g.off) : null,
         buildLvl: s.style === 'build' ? (nBars > 4 ? (b % 8) / 7 : phrasePos / 3) : 0,
         lhHit: (t, l, k = 1) => (x.lhStopAt != null && t - t0 >= x.lhStopAt - 1e-6) || V.lh.forEach((p, i) => add(p, t + i * 0.005, l, vb * k * (i ? 0.78 : 0.9), 0, true)),
@@ -446,7 +541,7 @@ export function generatePianist(settings, length, barLen = 4, ctx = null) {
       };
       (STYLE_FN[s.style] || STYLE_FN.sustain)(x);
       // passing/approach chord a half step from the next chord, and anticipations, at the end of the segment
-      if (next && L >= 2 && x.stopAt == null && !['arp', 'broken', 'ballad', 'minimal', 'ambient'].includes(s.style) && re() < P.emb.approach * s.cx * s.emb * 1.4 && !rhBusy(t0 + L - 0.5)) { // block passing chords suit comping, not flowing figures
+      if (next && L >= 2 && x.stopAt == null && !['arp', 'broken', 'ballad', 'minimal', 'ambient', 'twinkle'].includes(s.style) && re() < P.emb.approach * s.cx * s.emb * 1.4 && !rhBusy(t0 + L - 0.5)) { // block passing chords suit comping, not flowing figures
         const nv = voiceChord(next, P, s, { bass: st.bass, rh: st.rh }, rng(hash(s.seed, b * 13 + gi)), energy, null);
         const d = re() < 0.6 ? 1 : -1;
         nv.rh.forEach((p) => add(p + d, t0 + L - 0.5, 0.45, vb * 0.75, 1));

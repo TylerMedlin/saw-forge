@@ -5,7 +5,7 @@
 import { h } from './dom.js';
 import { Knob, selectEl, promptText } from './widgets.js';
 import { KEY_NAMES, parseChord, chordName, newSeed } from '../shared/pianist.js';
-import { MOODS, GENRES, RHYTHMS, EDIT_QUALITIES, FORMS, SECTION_NAMES, generateProgression, alternatives, extend, simplify, withInversions, moreComplex, transpose, editChord, voiceProgression } from '../shared/composer.js';
+import { MOODS, GENRES, RHYTHMS, EDIT_QUALITIES, FORMS, SECTION_NAMES, generateProgression, alternatives, extend, simplify, withInversions, moreComplex, transpose, rekey, editChord, voiceProgression } from '../shared/composer.js';
 import { barBeats } from '../core/project.js';
 
 const BLACK = [1, 3, 6, 8, 10];
@@ -21,9 +21,9 @@ export class ChordComposer {
     const app = this.app, opt = (a) => a.map(([v, l]) => ({ value: String(v), label: l }));
     const card = (t, cls, ...b) => this.ed.card(t, cls, ...b);
     // ---- settings
-    this.keySel = selectEl(opt(KEY_NAMES.map((k, i) => [i, k])), '7', (v) => { const C = this.C, t = transpose(C.chords, C.key, C.minor, ((+v - C.key + 18) % 12) - 6); this.setChords(t.chords, `Key: ${KEY_NAMES[+v]}`, { key: t.key }); }, 'sel-sm', 'Key (changing it transposes the chords)');
-    this.majBtn = h('button', { class: 'seg-btn', onClick: () => this.set({ minor: false }, 'Major') }, 'Major');
-    this.minBtn = h('button', { class: 'seg-btn', onClick: () => this.set({ minor: true }, 'Minor') }, 'Minor');
+    this.keySel = selectEl(opt(KEY_NAMES.map((k, i) => [i, k])), '7', (v) => this.rekey(+v, this.C.minor, `Key: ${KEY_NAMES[+v]}`), 'sel-sm', 'Key (changing it moves every chord to the new key)');
+    this.majBtn = h('button', { class: 'seg-btn', title: 'Major: the chords keep their scale degrees and become major-key chords', onClick: () => this.rekey(this.C.key, false, 'Major') }, 'Major');
+    this.minBtn = h('button', { class: 'seg-btn', title: 'Minor: the chords keep their scale degrees and become minor-key chords (G D Em C → Gm D Eb Cm)', onClick: () => this.rekey(this.C.key, true, 'Minor') }, 'Minor');
     this.genreSel = selectEl(opt(GENRES), 'worship', (v) => this.set({ genre: v }, 'Genre'), 'sel-sm', 'Genre');
     this.moodSel = selectEl(opt(MOODS.map((m) => [m, m])), 'Worshipful', (v) => this.set({ mood: v }, 'Mood'), 'sel-sm', 'Mood');
     this.barsSel = selectEl(opt([2, 4, 8, 12, 16].map((n) => [n, `${n} bars`])), '4', (v) => this.set({ bars: +v }, 'Measures'), 'sel-sm', 'Number of measures');
@@ -95,6 +95,7 @@ export class ChordComposer {
     const chords = generateProgression({ ...C, barLen: barBeats(this.app.p) }, seed);
     if (chords) { this.setChords(chords, 'Generate progression', { seed, sel: 0 }); this.play(); }
   }
+  rekey(key, minor, label) { const C = this.C; if (key === C.key && minor === C.minor) return; const t = rekey(C.chords, C.key, C.minor, key, minor); this.setChords(t.chords, label, { key: t.key, minor: t.minor }); this.play(); }
   shift(n) { const C = this.C, t = transpose(C.chords, C.key, C.minor, n); this.setChords(t.chords, 'Transpose', { key: t.key }); }
   editSel(change) {
     const C = this.C, ch = C.chords.map((c) => [...c]);

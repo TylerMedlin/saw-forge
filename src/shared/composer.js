@@ -4,12 +4,12 @@
 // leading, variety and cadence. Chords are stored as symbols + beats, so the
 // result is plain text the Session Pianist (and the user) can read and edit.
 
-import { parseChord, chordName, rng, hash, newSeed, scaleOf, pianistById } from './pianist.js';
+import { parseChord, chordName, rng, hash, newSeed, scaleOf, pianistById, rekeyChords } from './pianist.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const num = (v, d) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-export const MOODS = ['Worshipful', 'Hopeful', 'Emotional', 'Peaceful', 'Triumphant', 'Reflective', 'Melancholic', 'Cinematic', 'Gospel', 'Jazzy'];
-export const GENRES = [['worship', 'Worship'], ['pop', 'Pop'], ['gospel', 'Gospel'], ['jazz', 'Jazz'], ['soul', 'Soul'], ['cinematic', 'Cinematic'], ['songwriter', 'Singer-Songwriter'], ['classical', 'Classical']];
+export const MOODS = ['Worshipful', 'Hopeful', 'Emotional', 'Peaceful', 'Triumphant', 'Reflective', 'Melancholic', 'Cinematic', 'Gospel', 'Jazzy', 'Nostalgic'];
+export const GENRES = [['worship', 'Worship'], ['pop', 'Pop'], ['gospel', 'Gospel'], ['jazz', 'Jazz'], ['soul', 'Soul'], ['cinematic', 'Cinematic'], ['songwriter', 'Singer-Songwriter'], ['folk', 'Folk'], ['classical', 'Classical']];
 export const RHYTHMS = [[2, 'One chord / 2 bars'], [1, 'One chord / bar'], [0.5, 'Two chords / bar']];
 export const EDIT_QUALITIES = ['', 'm', '7', 'maj7', 'm7', 'add9', 'madd9', 'sus2', 'sus4', '7sus4', '6', 'm6', '9', 'maj9', 'm9', '11', 'm11', '13', '6/9', 'dim', 'm7b5', 'dim7', 'aug', '5'];
 
@@ -24,10 +24,12 @@ const T = {
   Melancholic: [['i VI III VII', 3, 1], ['i iv VI V', 2, 1], ['i VII VI V', 2, 1], ['i iv i V', 1, 1], ['vi IV I V', 2]],
   Cinematic: [['i VI III VII', 2, 1], ['i iv VI III', 2, 1], ['VI VII i i', 2, 1], ['i III VII iv', 1, 1], ['I bVI IV I', 2]],
   Gospel: [['I IV I V', 2], ['I vi ii V', 2], ['IV #iv° I/V V', 2], ['I I7 IV iv', 2], ['ii V I IV', 1]],
+  // late-summer indie folk: plagal IV–I motion, the vi that never quite resolves, long loops that sit on the tonic
+  Nostalgic: [['IV I V vi', 3], ['I IV vi IV', 2], ['vi IV I I', 2], ['I iii IV IV', 2], ['IV vi I V', 1], ['I V/vii IV I', 1], ['i VI III VII', 2, 1], ['i VII iv i', 1, 1]],
   Jazzy: [['ii V I vi', 3], ['I vi ii V', 2], ['iii vi ii V', 2], ['IV iv iii VI7', 1], ['I IV iii VI7', 1]],
 };
 const MINOR_FALLBACK = [['i VI III VII', 2, 1], ['i iv VI V', 2, 1], ['i VII VI VII', 1, 1], ['VI VII i i', 1, 1], ['i iv VII III', 1, 1]];
-const RESOLVE = new Set(['Worshipful', 'Peaceful', 'Triumphant', 'Reflective', 'Gospel']);
+const RESOLVE = new Set(['Worshipful', 'Peaceful', 'Triumphant', 'Reflective', 'Gospel', 'Nostalgic']);
 
 export const SECTION_NAMES = ['Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Bridge', 'Instrumental', 'Outro'];
 export const FORMS = [
@@ -80,6 +82,11 @@ function colour(ch, genre, cx, r, key) {
     case 'worship': if (p(0.2 + 0.6 * cx)) suf = minor ? any(['m7', 'm', 'madd9']) : dom ? any(['sus4', '', 'add9']) : any(tonicish ? ['add9', 'add9', 'maj7', 'sus2'] : ['add9', 'sus2']); break;
     case 'cinematic': if (p(0.2 + 0.5 * cx)) suf = minor ? any(['madd9', 'm', 'm7']) : any(['add9', 'sus2', '5']); break;
     case 'classical': if (dom && p(0.3 + 0.5 * cx)) suf = '7'; else if (fn === 2 && minor && p(0.4 * cx)) suf = 'm7'; break;
+    case 'folk': { // open-string colours and a held tonic pedal under the IV (IV/I), as a capo'd guitar would ring
+      if (p(0.3 + 0.55 * cx)) suf = minor ? any(['madd9', 'm7', 'm']) : dom ? any(['sus4', '', 'add9']) : any(cx > 0.6 ? ['add9', 'sus2', 'maj7', 'add9'] : ['add9', 'sus2', 'add9', '']);
+      if (fn === 5 && !minor && ch.bass == null && p(0.35 * cx)) return parseChord(make(ch.root, suf, key, key, false), key, false) || ch;
+      break;
+    }
     case 'pop': if (p(0.15 + 0.4 * cx)) suf = minor ? any(['m7', 'm']) : dom ? any(['sus4', '']) : any(['add9', 'sus2', '']); break;
     default: if (p(0.4 * cx)) suf = minor ? 'm7' : any(['add9', 'sus4', '']); // songwriter
   }
@@ -123,7 +130,7 @@ export function generateProgression(c, seed = newSeed()) {
     if (RESOLVE.has(c.mood) && n >= 8) seq[n - 1] = c.minor ? 'i' : 'I'; // longer phrases come home
     if (n >= 8 && r() < 0.5) seq[n / 2 - 1 | 0] = c.minor ? 'V' : 'V'; // half cadence at the middle
     let chs = seq.map((rn) => colour(parseChord(rn, c.key, c.minor), c.genre, c.cx, r, c.key));
-    chs = invert(chs, c.key, c.minor, ['classical', 'worship', 'gospel'].includes(c.genre) ? 0.25 + 0.6 * c.cx : 0.4 * c.cx, r);
+    chs = invert(chs, c.key, c.minor, ['classical', 'worship', 'gospel', 'folk'].includes(c.genre) ? 0.25 + 0.6 * c.cx : 0.4 * c.cx, r);
     // passing chords: a secondary dominant leading into the next chord
     const out = [];
     chs.forEach((ch, i) => {
@@ -187,6 +194,8 @@ export function transpose(chords, key, minor, n) {
   const k2 = (key + n + 12) % 12;
   return { key: k2, chords: chords.map(([s, d]) => { const c = parseChord(s, key, minor); return [c ? make(c.root + n, c.suf, c.bass != null ? c.bass + n : null, k2, minor) : s, d]; }) };
 }
+// A new key and/or mode for the whole progression (see rekeyChord): keeps the shape, moves every chord
+export function rekey(chords, key, minor, key2, minor2) { return { key: ((key2 % 12) + 12) % 12, minor: !!minor2, chords: rekeyChords(chords, key, minor, key2, minor2) }; }
 export const editChord = (sym, key, minor, { root, suf, bass }) => { const c = parseChord(sym, key, minor) || { root: key, suf: '', bass: null }; return make(root ?? c.root, suf ?? c.suf, bass === undefined ? c.bass : bass, key, minor); };
 
 // ----------------------------------------------------------------- whole songs
@@ -200,9 +209,9 @@ export function sectionParts(C, base, barLen = 4) {
     else if (name === 'Bridge') { const k = Math.min(2, ch.length - 1); chords = moreComplex(ch.slice(k).concat(ch.slice(0, k)), C.key, C.minor); } // new harmonic ground
     else if (name === 'Outro') chords = [...ch.slice(-2), [tonic, barLen * 2]]; // come home
     else if (name === 'Pre-Chorus') chords = [...ch.slice(1, Math.max(2, ch.length - 1)), [chordName(parseChord('V', C.key, C.minor), C.key, C.minor), barLen]]; // lift into the chorus on the dominant
-    const style = name === 'Intro' ? (['worship', 'cinematic'].includes(P.id) ? 'ambient' : 'sustain')
+    const style = name === 'Intro' ? (['worship', 'cinematic'].includes(P.id) ? 'ambient' : P.id === 'folk' ? 'twinkle' : 'sustain')
       : name === 'Bridge' ? 'build' : name === 'Instrumental' ? (P.id === 'gospel' ? 'runs' : 'fills')
-      : name === 'Outro' ? (P.id === 'worship' ? 'arp' : 'sustain') : base.style;
+      : name === 'Outro' ? (P.id === 'worship' ? 'arp' : P.id === 'folk' ? 'twinkle' : 'sustain') : base.style;
     return { name, bars, pn: { ...base, style, key: C.key, minor: C.minor, prog: toProgText(chords, barLen), seed: newSeed(), var: 0 } };
   });
 }

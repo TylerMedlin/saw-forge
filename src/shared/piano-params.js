@@ -18,6 +18,8 @@ export const PIANO_MODELS = [
   { name: 'Studio Grand', desc: 'Balanced, clear recording grand', mass: 0.95, k0: 1.5, p: 0.05, beta: 0.95, inh: 1.2, t60: 0.85, prompt: 0.85, hf: 1.35, uni: 0.3, stretch: 1, sbScale: 1.1, sbQ: 0.9, sbGain: 0.85, low: 0.85, mech: 0.7, damp: 1, irr: 0, hyst: 0.8, gain: 0.95 },
   { name: 'Felt Piano', desc: 'Felt strip between hammers and strings: soft, muted, close', mass: 1.1, k0: 0.07, p: -0.45, beta: 1, inh: 2, t60: 0.5, prompt: 0.7, hf: 0.28, uni: 0.8, stretch: 0.8, sbScale: 1.35, sbQ: 0.8, sbGain: 1.4, low: 1.1, mech: 2.2, damp: 1.5, irr: 0.1, hyst: 4, gain: 1.9 },
   { name: 'Vintage Character', desc: 'Worn hammers, wandering unisons, uneven voicing', mass: 1, k0: 1.3, p: 0.1, beta: 1.05, inh: 1.5, t60: 0.7, prompt: 0.75, hf: 0.8, uni: 2.6, stretch: 1.2, sbScale: 1.2, sbQ: 0.85, sbGain: 1.2, low: 0.8, mech: 1.5, damp: 0.8, irr: 1, hyst: 0.6, gain: 1.1 },
+  { name: 'Soft Grand', desc: 'Concert grand voiced soft: heavier, gentler hammers, mellow and warm', mass: 1.08, k0: 0.4, p: -0.25, beta: 1, inh: 1, t60: 1.05, prompt: 1, hf: 0.75, uni: 0.45, stretch: 1, sbScale: 1, sbQ: 1.05, sbGain: 1.1, low: 1.1, mech: 0.7, damp: 1, irr: 0.05, hyst: 1.8, gain: 1.3 },
+  { name: 'Una Corda', desc: 'Grand with the soft pedal down: the hammer meets fewer strings with its softer felt', mass: 1, k0: 0.75, p: -0.1, beta: 1, inh: 1, t60: 1, prompt: 1, hf: 0.85, uni: 0.5, stretch: 1, sbScale: 1, sbQ: 1, sbGain: 1.05, low: 1, mech: 0.8, damp: 1, irr: 0, hyst: 1.4, gain: 1.25, una: 1 },
 ];
 export const PIANO_MODEL_NAMES = PIANO_MODELS.map((m) => m.name);
 
@@ -36,6 +38,14 @@ export const PIANO_PARAMS = [
   P('dyn', 'Dynamic Response', 0, 1, 0.5, { unit: '%', short: 'Dynamics' }),
   P('pedal', 'Sustain Pedal', 0, 1, 0, { unit: '%', short: 'Pedal' }),
   P('level', 'Level', -24, 6, 0, { unit: 'dB' }),
+  P('soft', 'Softness', 0, 1, 0, { unit: '%' }),
+  P('una', 'Una Corda', 0, 1, 0, { unit: '%', short: 'Una corda' }),
+  P('real', 'Realism', 0, 1, 0.5, { unit: '%' }),
+  P('vcurve', 'Velocity Curve', 0, 3, 1, { curve: 'enum', options: ['Soft', 'Normal', 'Hard', 'Custom'], automatable: false, short: 'Vel curve' }),
+  P('vgamma', 'Custom Curve', 0.3, 3, 1, { short: 'Custom' }),
+  P('mic', 'Perspective', 0, 4, 1, { curve: 'enum', options: ['Close mics', 'Player', 'Audience', 'Warm studio', 'Concert hall'], automatable: false }),
+  P('rsize', 'Room Size', 0, 1, 0.3, { unit: '%', short: 'Size' }),
+  P('pnoise', 'Pedal Noise', 0, 1, 0.5, { unit: '%', short: 'Pedal noise' }),
 ];
 export const PIANO_INDEX = Object.fromEntries(PIANO_PARAMS.map((p, i) => [p.id, i]));
 export const PIANO_DEF = Object.fromEntries(PIANO_PARAMS.map((p) => [p.id, p]));

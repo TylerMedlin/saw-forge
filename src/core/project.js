@@ -152,6 +152,54 @@ export function findClip(p, id) {
 }
 export const clipEnd = (c) => c.start + c.length;
 export const barBeats = (p) => (p.sigNum * 4) / p.sigDen;
+
+// ---- One region at a time on an instrument track
+// MIDI, Drummer and Pianist regions never stack: a region placed on a track (moved, pasted,
+// duplicated, resized, created) takes the space it covers, and whatever was underneath is
+// trimmed, split around it or removed — like Logic and Ableton. Audio tracks are left alone:
+// their comp clips overlap on purpose for crossfades.
+const EPS = 1e-6;
+const ownsSpace = (t) => !!t && t.kind === 'instrument';
+// Drop the part of clip c before `beat` (the content carries on where it was).
+function trimClipStart(p, c, beat) {
+  const cut = beat - c.start;
+  c.start = beat; c.length -= cut;
+  if (c.kind === 'midi') c.offset = (c.offset || 0) + cut;
+  else if (c.kind === 'drummer') c.offset = 0;
+  else if (c.kind === 'pianist') { // keep the chords that were under the remaining part
+    const toks = c.pn.prog.replace(/\|/g, ' ').split(/\s+/).filter(Boolean), k = toks.length ? Math.round(cut / barBeats(p)) % toks.length : 0;
+    c.offset = 0; c.pn = { ...c.pn, prog: toks.slice(k).concat(toks.slice(0, k)).join(' ') };
+  }
+}
+// Make the clips `ids` the only regions over their time span on their tracks. Returns the ids removed.
+export function claimSpace(p, ids) {
+  const winners = new Set(ids), removed = [];
+  for (const t of p.tracks) {
+    if (!ownsSpace(t)) continue;
+    const mine = t.clips.filter((c) => winners.has(c.id));
+    if (!mine.length) continue;
+    for (const w of mine) {
+      const ws = w.start, we = w.start + w.length;
+      const out = [];
+      for (const c of t.clips) {
+        if (winners.has(c.id)) { out.push(c); continue; }
+        const cs = c.start, ce = c.start + c.length;
+        if (ce <= ws + EPS || cs >= we - EPS) { out.push(c); continue; } // no overlap
+        const keepLeft = cs < ws - EPS, keepRight = ce > we + EPS;
+        if (!keepLeft && !keepRight) { removed.push(c.id); continue; } // fully covered
+        if (keepLeft && keepRight) { // the new region sits inside: split around it
+          const right = cloneJSON(c); right.id = uid('clp');
+          trimClipStart(p, right, we);
+          c.length = ws - cs;
+          out.push(c, right);
+        } else if (keepLeft) { c.length = ws - cs; out.push(c); }
+        else { trimClipStart(p, c, we); out.push(c); }
+      }
+      t.clips = out;
+    }
+  }
+  return removed;
+}
 export function projectEndBeat(p) {
   let end = 0;
   for (const t of p.tracks) for (const c of t.clips) end = Math.max(end, clipEnd(c));

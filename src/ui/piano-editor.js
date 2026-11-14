@@ -8,7 +8,7 @@
 import { h } from './dom.js';
 import { Knob, contextMenu, selectEl, promptText } from './widgets.js';
 import { PIANO_MODELS, PIANO_DEF } from '../shared/piano-params.js';
-import { PIANISTS, STYLES, KEY_NAMES, pianistById, parseProgression, chordName } from '../shared/pianist.js';
+import { PIANISTS, STYLES, KEY_NAMES, pianistById, parseProgression, chordName, rekeyProgression } from '../shared/pianist.js';
 import { findTrack, isPianoTrack, barBeats } from '../core/project.js';
 import { ChordComposer } from './chord-composer.js';
 
@@ -86,11 +86,18 @@ export class PianoEditor {
         h('button', { class: 'btn ghost sm', title: 'Save the current sound as a preset', onClick: async () => { const t = this.track; if (!t) return; const n = await promptText('Save piano preset', t.instrument.preset === PIANO_MODELS[Math.round(t.instrument.params.model)].name ? `My ${t.instrument.preset}` : t.instrument.preset); if (n) app.savePianoPreset(t.id, n.trim()); } }, 'Save'),
         h('button', { class: 'btn ghost sm', title: 'Delete the chosen preset', onClick: () => { if (this.presetSel.value) app.deletePianoPreset(this.presetSel.value); } }, 'Delete')));
     const grp = (title, ...knobs) => h('div', { class: 'dr-kgrp' }, h('div', { class: 'dr-sub' }, title), h('div', { class: 'knob-row' }, ...knobs));
+    const choice = (pid, title) => { // enum parameters (velocity curve, mic perspective) as menus
+      const d = PIANO_DEF[pid];
+      const sel = selectEl(d.options.map((o, i) => ({ value: i, label: o })), d.def, (v) => { if (this.trackId) app.setPianoParam(this.trackId, pid, Number(v)); }, 'sm', title);
+      this.controls.set(pid, { set: (v) => { sel.value = String(Math.round(v)); }, auto: () => {} });
+      return h('div', { class: 'pn-choice' }, h('span', { class: 'dr-sub' }, d.short), sel);
+    };
     const sound = this.card('SOUND', 'pn-sound', h('div', { class: 'dr-kgrid' },
-      grp('HAMMERS & TOUCH', this.knob('hard'), this.knob('dyn'), this.knob('mech')),
-      grp('STRINGS', this.knob('bright'), this.knob('sustain'), this.knob('tuning'), this.knob('sres')),
-      grp('BODY & SPACE', this.knob('warmth'), this.knob('sbres'), this.knob('width'), this.knob('room')),
-      grp('OUTPUT', this.knob('pedal'), this.knob('level'))));
+      grp('HAMMERS & TOUCH', this.knob('hard'), this.knob('dyn'), this.knob('soft'), this.knob('una'), this.knob('mech')),
+      grp('VELOCITY', choice('vcurve', 'Match the piano to your MIDI controller: Soft for light-action keyboards, Hard for heavy ones'), this.knob('vgamma')),
+      grp('STRINGS', this.knob('bright'), this.knob('sustain'), this.knob('tuning'), this.knob('sres'), this.knob('real')),
+      grp('BODY & SPACE', this.knob('warmth'), this.knob('sbres'), this.knob('width'), this.knob('room'), this.knob('rsize'), choice('mic', 'Where the microphones are')),
+      grp('OUTPUT', this.knob('pedal'), this.knob('pnoise'), this.knob('level'))));
     this.keys = h('div', { class: 'pn-keys' });
     let white = 0;
     for (let p = KEY_LO; p <= KEY_HI; p++) {
@@ -114,9 +121,9 @@ export class PianoEditor {
     // ================= JAM
     this.jamBtn = h('button', { class: 'btn primary pn-jam', title: 'Start / stop: the pianist loops this part on the transport (the Drummer plays along in sync)', onClick: () => { if (this.trackId) app.jam(this.trackId); } }, 'JAM');
     this.nowEl = h('b', { class: 'pn-now' }, '—'); this.nextEl = h('span', { class: 'pn-next' }, '');
-    this.keySel = selectEl(KEY_NAMES.map((k, i) => ({ value: String(i), label: k })), '7', (v) => this.set({ key: +v }, 'Pianist key'), 'sel-sm', 'Key');
-    this.majBtn = h('button', { class: 'seg-btn', onClick: () => this.set({ minor: false }, 'Pianist: major') }, 'Major');
-    this.minBtn = h('button', { class: 'seg-btn', onClick: () => this.set({ minor: true }, 'Pianist: minor') }, 'Minor');
+    this.keySel = selectEl(KEY_NAMES.map((k, i) => ({ value: String(i), label: k })), '7', (v) => this.rekey(+v, null, `Pianist key: ${KEY_NAMES[+v]}`), 'sel-sm', 'Key (changing it moves the chords to the new key)');
+    this.majBtn = h('button', { class: 'seg-btn', title: 'Major: the chords keep their scale degrees and become major-key chords', onClick: () => this.rekey(null, false, 'Pianist: major') }, 'Major');
+    this.minBtn = h('button', { class: 'seg-btn', title: 'Minor: the chords keep their scale degrees and become minor-key chords (G D Em C → Gm D Eb Cm)', onClick: () => this.rekey(null, true, 'Pianist: minor') }, 'Minor');
     this.progIn = h('input', { class: 'text-input pn-prog', spellcheck: false, placeholder: 'G D/F# Em7 Cadd9   (one chord per bar; "C,G" splits a bar; I V vi IV works too)' });
     this.progIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') this.progIn.blur(); });
     this.progIn.addEventListener('change', () => this.set({ prog: this.progIn.value.trim() }, 'Pianist chords'));
@@ -152,6 +159,13 @@ export class PianoEditor {
     this.el = h('div', { class: 'synth dr pn' }, header, this.playView, this.jamView, this.composeView, this.placeholder);
   }
 
+  // A new key or mode rewrites the progression too (chord names are absolute; Roman numerals follow on their own)
+  rekey(key, minor, label) {
+    const c = this.clip, s = c ? c.pn : { key: 7, minor: false, prog: 'G D Em C' };
+    const k = key ?? s.key, m = minor ?? s.minor;
+    if (k === s.key && m === s.minor) return;
+    this.set({ key: k, minor: m, prog: rekeyProgression(s.prog, s.key, s.minor, k, m) }, label);
+  }
   set(patch, label) {
     const c = this.clip;
     if (c) this.app.setPianist(c.id, patch, label);

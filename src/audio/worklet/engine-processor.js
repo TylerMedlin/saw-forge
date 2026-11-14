@@ -118,12 +118,14 @@ class EngineProcessor extends AudioWorkletProcessor {
       case 'live': {
         const ch = this.channels.get(m.ch);
         if (!ch || !ch.inst) break;
-        if (m.ev === 'on') ch.inst.noteOn(m.pitch, m.vel);
+        if (m.ev === 'on') ch.inst.noteOn(m.pitch, m.vel, true); // live: the piano applies its velocity curve
         else if (m.ev === 'off') ch.inst.noteOff(m.pitch);
         else if (m.ev === 'bend') ch.inst.pitchBend(m.value);
         else if (m.ev === 'mw') ch.inst.modWheel(m.value);
         else if (m.ev === 'allOff') ch.inst.allNotesOff(false);
         else if (m.ev === 'pedal' && ch.inst.setPedal) ch.inst.setPedal(m.value);
+        else if (m.ev === 'softPedal' && ch.inst.setSoftPedal) ch.inst.setSoftPedal(m.value);
+        else if (m.ev === 'softness' && ch.inst.setSoftness) ch.inst.setSoftness(m.value);
         break;
       }
       case 'panic': this.recover(false); break;

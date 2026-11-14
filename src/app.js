@@ -24,7 +24,7 @@ import { DRUMMERS, drummerById, newDrummerSettings, generateDrummer, newSeed } f
 import {
   newWorshipInstrument, newSetlist, newSong, newDrumInstrument, newDrummerClip, isDrumTrack, clipFits, newPianoInstrument, isPianoTrack, newPianistClip,
   newProject, newTrack, newBus, newInsert, newMidiClip, newAudioClip, newLane, newSynthInstrument, normalizeProject,
-  findChannel, findTrack, findClip, allChannels, cloneJSON, uid, barBeats, projectEndBeat, newNote,
+  findChannel, findTrack, findClip, allChannels, cloneJSON, uid, barBeats, projectEndBeat, newNote, claimSpace,
 } from './core/project.js';
 import { SYNTH_DEF, EFFECT_DEFS, MIX_PARAMS, toNorm, faderDbToNorm, dbToGain } from './shared/params.js';
 import { FACTORY_PRESETS } from './shared/presets.js';
@@ -683,7 +683,7 @@ export class App extends EventTarget {
       const t = findTrack(p, trackId);
       if (!t || t.kind !== 'instrument') return false;
       const c = newMidiClip(start, length, [], t.name);
-      id = c.id; t.clips.push(c);
+      id = c.id; t.clips.push(c); claimSpace(p, [id]);
     }, 'clips');
     if (id) { this.selectClips([id]); this.editClip(id); }
     return id;
@@ -708,8 +708,9 @@ export class App extends EventTarget {
         const c = cloneJSON(f.clip); c.id = uid('clp'); c.start += span;
         t.clips.push(c); created.push(c.id);
       }
+      claimSpace(p, created);
     }, 'clips');
-    this.selectClips(created);
+    this.selectClips(created); this.validateSelection();
   }
   splitClips(ids, beat) {
     const created = [];
@@ -757,8 +758,9 @@ export class App extends EventTarget {
         t.clips.push(c); created.push(c.id);
       }
       if (!created.length) return false;
+      claimSpace(p, created);
     }, 'clips');
-    if (created.length) this.selectClips(created); else toast('Nothing to paste here — select a matching track.');
+    if (created.length) { this.selectClips(created); this.validateSelection(); } else toast('Nothing to paste here — select a matching track.');
   }
 
   // ------------------------------------------------------------------ audio import
@@ -1013,7 +1015,7 @@ export class App extends EventTarget {
         const t = findTrack(p, tid);
         if (!t) continue;
         let clip = t.clips.find((c) => c.kind === 'midi' && c.start <= rs + 1e-6 && c.start + c.length >= re - 1e-6);
-        if (!clip) { clip = newMidiClip(rs, Math.max(bar, re - rs), [], `${t.name} rec`); t.clips.push(clip); }
+        if (!clip) { clip = newMidiClip(rs, Math.max(bar, re - rs), [], `${t.name} rec`); t.clips.push(clip); claimSpace(p, [clip.id]); }
         const Lc = clip.loopLen || clip.length;
         for (const n of notes) {
           let s = n.s - clip.start + (clip.offset || 0);
@@ -1242,7 +1244,7 @@ export class App extends EventTarget {
     let id;
     this.store.do('Create Pianist region', (p) => {
       const c = newPianistClip(start, len, pn);
-      findTrack(p, trackId).clips.push(c); id = c.id;
+      findTrack(p, trackId).clips.push(c); id = c.id; claimSpace(p, [id]);
     }, 'clips');
     if (id) { this.selectClips([id]); this.editClip(id); }
     return id;
@@ -1309,7 +1311,7 @@ export class App extends EventTarget {
       const vs = voiceProgression(C.chords, C.key, C.minor), notes = [];
       let at = 0, id;
       C.chords.forEach(([, d], i) => { const v = vs[i]; if (v.bass != null) notes.push(newNote(v.bass, at, d, 0.7)); for (const p of v.rh) notes.push(newNote(p, at, d, 0.6)); at += d; });
-      this.store.do('Insert chords as MIDI', (p) => { const c = newMidiClip(start, len, notes, 'Chords'); findTrack(p, trackId).clips.push(c); id = c.id; }, 'clips');
+      this.store.do('Insert chords as MIDI', (p) => { const c = newMidiClip(start, len, notes, 'Chords'); findTrack(p, trackId).clips.push(c); id = c.id; claimSpace(p, [id]); }, 'clips');
       if (id) this.selectClips([id]);
       toast('Chords inserted as a MIDI clip — open it in the Piano Roll to edit.', 'ok');
       return;
@@ -1317,7 +1319,7 @@ export class App extends EventTarget {
     const prog = toProgText(C.chords, bar);
     const ex = t.clips.find((c) => c.kind === 'pianist' && Math.abs(c.start - start) < 1e-6);
     if (ex) {
-      this.store.do('Chords → Pianist part', (p) => { const g = findClip(p, ex.id).clip; Object.assign(g.pn, { prog, key: C.key, minor: C.minor }); g.length = len; }, 'clips', { id: ex.id });
+      this.store.do('Chords → Pianist part', (p) => { const g = findClip(p, ex.id).clip; Object.assign(g.pn, { prog, key: C.key, minor: C.minor }); g.length = len; claimSpace(p, [ex.id]); }, 'clips', { id: ex.id });
       this.selectClips([ex.id]); this.editClip(ex.id);
     } else {
       const tgt = this.pianistTarget(trackId);
@@ -1339,11 +1341,11 @@ export class App extends EventTarget {
     let first;
     this.store.do('Generate full piano part', (p) => {
       const tr = findTrack(p, trackId);
-      tr.clips = tr.clips.filter((c) => !(c.kind === 'pianist' && c.start < end - 1e-6 && c.start + c.length > start + 1e-6)); // kept MIDI parts stay untouched
+      tr.clips = tr.clips.filter((c) => !(c.kind === 'pianist' && c.start < end - 1e-6 && c.start + c.length > start + 1e-6)); // the new parts then take their space (MIDI under them is trimmed)
       let at = start;
       for (const x of parts) {
         const c = newPianistClip(at, x.bars * bar, x.pn, x.name);
-        tr.clips.push(c); first = first || c.id;
+        tr.clips.push(c); first = first || c.id; claimSpace(p, [c.id]);
         if (!p.markers.some((m) => Math.abs(m.beat - at) < 1e-6)) p.markers.push({ id: uid('mrk'), beat: at, name: x.name });
         at += x.bars * bar;
       }
@@ -1398,7 +1400,7 @@ export class App extends EventTarget {
       else if (top.length > 1 && top[1].ov >= bar * 0.35) toks.push(top.slice(0, 2).sort((x, y) => x.at - y.at).map((x) => x.sym).join(','));
       else toks.push(top[0].sym);
     }
-    this.store.do('Capture played chords', (p) => { const g = findClip(p, cf.clipId).clip; g.pn.prog = toks.join(' '); g.length = nBars * bar; }, 'clips', { id: cf.clipId });
+    this.store.do('Capture played chords', (p) => { const g = findClip(p, cf.clipId).clip; g.pn.prog = toks.join(' '); g.length = nBars * bar; claimSpace(p, [cf.clipId]); }, 'clips', { id: cf.clipId });
     toast(`Captured ${nBars} bar${nBars > 1 ? 's' : ''} of your chords into the pianist's part. "Keep as MIDI" freezes the performance.`, 'ok', 6000);
   }
   // JAM: loop the pianist's region on the project transport (the drummer, if any, plays along in sync)
@@ -1447,7 +1449,7 @@ export class App extends EventTarget {
     let id;
     this.store.do('Create Drummer region', (p) => {
       const c = newDrummerClip(start, len, dr, drummerById(dr.id).name);
-      findTrack(p, trackId).clips.push(c); id = c.id;
+      findTrack(p, trackId).clips.push(c); id = c.id; claimSpace(p, [id]);
     }, 'clips');
     if (id) { this.selectClips([id]); this.editClip(id); }
     return id;
@@ -1760,8 +1762,11 @@ export class App extends EventTarget {
   }
   noteOff(pitch, targets = null) {
     if (this.chordFollow && !targets) { this.chordInput(pitch, false); this.emit('note', { pitch, on: false }); return; }
-    if (this.sustain) { this.sustained.add(pitch); return; }
     const tg = targets || this.liveTargets();
+    if (this.sustain) { // the piano models its own dampers: it hears the key go up; other instruments hold until the pedal lifts
+      for (const t of tg) if (isPianoTrack(t)) this.engine.live(t.id, 'off', pitch);
+      this.sustained.add(pitch); return;
+    }
     for (const t of tg) this.engine.live(t.id, 'off', pitch);
     if (this.recording) {
       const n = this.recording.open.get(pitch);
@@ -1769,9 +1774,11 @@ export class App extends EventTarget {
     }
     this.emit('note', { pitch, on: false });
   }
-  setSustain(on) {
+  setSustain(on, amount = on ? 1 : 0) {
+    const was = this.sustain;
     this.sustain = on;
-    for (const t of this.liveTargets()) if (isPianoTrack(t)) this.engine.live(t.id, 'pedal', 0, 0, on ? 1 : 0); // dampers lift: the strings ring together
+    for (const t of this.liveTargets()) if (isPianoTrack(t)) this.engine.live(t.id, 'pedal', 0, 0, amount); // dampers lift (partly, for half-pedal): the strings ring together
+    if (on === was && on) return; // a half-pedal move, not a press or release
     this.emit('pedal', on);
     if (!on) { for (const p of this.sustained) this.noteOff(p); this.sustained.clear(); }
   }
@@ -1799,7 +1806,9 @@ export class App extends EventTarget {
     else if (st === 0x80 || (st === 0x90 && d[2] === 0)) this.noteOff(d[1]);
     else if (st === 0xe0) this.pitchBend(((d[2] << 7) | d[1]) / 8192 - 1);
     else if (st === 0xb0 && d[1] === 1) this.modWheel(d[2] / 127);
-    else if (st === 0xb0 && d[1] === 64) this.setSustain(d[2] >= 64);
+    else if (st === 0xb0 && d[1] === 64) this.setSustain(d[2] >= 64, d[2] / 127); // continuous CC64: half-pedalling on the piano
+    else if (st === 0xb0 && d[1] === 67) { for (const t of this.liveTargets()) if (isPianoTrack(t)) this.engine.live(t.id, 'softPedal', 0, 0, d[2] / 127); } // una corda
+    else if (st === 0xb0 && d[1] === 11) { for (const t of this.liveTargets()) if (isPianoTrack(t)) this.engine.live(t.id, 'softness', 0, 0, 1 - d[2] / 127); } // expression pedal: heel back = softer felt
     else if (st === 0xb0 && d[1] === 123) for (const t of this.liveTargets()) this.engine.live(t.id, 'allOff');
   }
 

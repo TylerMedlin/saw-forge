@@ -6,7 +6,7 @@ import { h, drag, Surface, clamp, css } from './dom.js';
 import { icon } from './icons.js';
 import { HSlider, contextMenu, selectEl, toast, promptText } from './widgets.js';
 import { DND_TYPE, currentDrag } from './browser.js';
-import { findChannel, findClip, findTrack, barBeats, projectEndBeat, TRACK_COLORS, cloneJSON, uid, isDrumTrack, clipFits } from '../core/project.js';
+import { findChannel, findClip, findTrack, barBeats, projectEndBeat, TRACK_COLORS, cloneJSON, uid, isDrumTrack, clipFits, claimSpace } from '../core/project.js';
 import { instDefs } from '../shared/instruments.js';
 import { PIECES } from '../shared/drums.js';
 import { generateDrummer, drummerById, SPEED_NAMES } from '../shared/drummers.js';
@@ -994,7 +994,13 @@ export class Arrangement {
           }
         }, 'clips');
       },
-      up: () => { if (began) { this.op = null; app.store.end('clips'); } },
+      up: () => {
+        if (!began) return;
+        this.op = null;
+        // the moved / duplicated / resized regions win: whatever they now cover on their track is trimmed away
+        app.store.live((q) => { claimSpace(q, ids); }, 'clips');
+        app.store.end('clips'); app.validateSelection(); app.uiChanged('clips');
+      },
     });
   }
 
@@ -1285,7 +1291,8 @@ export class Arrangement {
     }
     if (!mod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && sel.length) {
       const d = (e.key === 'ArrowRight' ? 1 : -1) * (this.gridUnit() || 0.25);
-      app.store.do('Nudge clips', (q) => { for (const id of sel) { const f = findClip(q, id); if (f) f.clip.start = Math.max(0, f.clip.start + d); } }, 'clips');
+      app.store.do('Nudge clips', (q) => { for (const id of sel) { const f = findClip(q, id); if (f) f.clip.start = Math.max(0, f.clip.start + d); } claimSpace(q, sel); }, 'clips');
+      app.validateSelection(); app.uiChanged('clips');
       return true;
     }
     if (!mod && (e.key === '+' || e.key === '=')) { this.zoomBy(1.4); return true; }
