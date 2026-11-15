@@ -3,6 +3,7 @@
 //   build/installerSidebar.bmp, ...Header.bmp Windows setup wizard artwork
 //   build/dmg-background(.png|@2x.png)        macOS disk image window
 //   assets/apps/saw-forge-studio/icon.*       Saw Forge Studio icon (shortcuts, hub cards)
+//   assets/apps/worship-pedalboard/icon.*     Worship Pedalboard icon
 //   hub/img/*.png, ../site/img/*.png          icons for the hub UI and the download site
 // Run: npm run assets
 
@@ -63,6 +64,16 @@ function appIcon(size, variant) {
   // inner rim light
   img.fill((x, y) => { const d = sdRoundRect(x, y, cx, cy, hw, hw, r); const a = cover(Math.abs(d + 3 * s) - 1.6 * s) * 0.35; return a && y < cy ? [255, 255, 255, a * (1 - y / cy)] : null; });
   const pts = SAW.map(([px, py]) => [px * s, py * s]), half = 27 * s;
+  if (variant === 'pedalboard') { // a stompbox: outline, two knobs, footswitch, with the studio's orange glow
+    const box = (x, y) => Math.abs(sdRoundRect(x, y, cx, cy + 10 * s, 210 * s, 290 * s, 60 * s)) - 24 * s;
+    const knob = (x, y) => Math.min(Math.hypot(x - 430 * s, y - 380 * s), Math.hypot(x - 594 * s, y - 380 * s)) - 50 * s;
+    const sw = (x, y) => Math.hypot(x - cx, y - 640 * s) - 74 * s;
+    const shape = (x, y) => Math.min(box(x, y), knob(x, y), sw(x, y));
+    img.fill((x, y) => { const d = shape(x, y); const a = Math.exp(-Math.max(0, d) / (26 * s)) * 0.5; return d > 120 * s ? null : [255, 128, 40, a]; });
+    img.fill((x, y) => { const a = cover(shape(x, y)); if (!a) return null; const t = clamp((y / s - 250) / 520); return [255, mix(186, 116, t), mix(112, 26, t), a]; });
+    img.fill((x, y) => { const a = cover(Math.hypot(x - 512 * s, y - 300 * s) - 16 * s); return a ? [255, 70, 60, a] : null; }); // LED
+    return img;
+  }
   if (variant === 'hub') {
     img.fill((x, y) => { const a = cover(sdPolyline(x, y + 10 * s, pts) - half) * 0.25; return a ? [90, 30, 0, a] : null; });
     img.fill((x, y) => { const a = cover(sdPolyline(x, y, pts) - half); return a ? [30, 20, 18, a] : null; });
@@ -158,6 +169,9 @@ out('assets/apps/saw-forge-studio/icon.png', png(appIcon(512, 'studio')));
 out('assets/apps/saw-forge-studio/icon.ico', ico(hubSizes.map((s) => appIcon(s, 'studio'))));
 out('hub/img/hub-icon.png', png(appIcon(128, 'hub')));
 out('hub/img/studio-icon.png', png(appIcon(256, 'studio')));
+out('assets/apps/worship-pedalboard/icon.png', png(appIcon(512, 'pedalboard')));
+out('assets/apps/worship-pedalboard/icon.ico', ico(hubSizes.map((s) => appIcon(s, 'pedalboard'))));
+out('hub/img/pedalboard-icon.png', png(appIcon(256, 'pedalboard')));
 out('../site/img/hub-icon.png', png(appIcon(256, 'hub')));
 out('../site/img/studio-icon.png', png(appIcon(256, 'studio')));
 out('../site/img/favicon.png', png(appIcon(64, 'hub')));

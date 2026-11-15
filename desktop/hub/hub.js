@@ -201,13 +201,15 @@ function demoApi() {
     configured: false, publisher: 'Saw Forge', catalogSource: 'bundled', catalogError: null, checkedAt: Date.now(), comingSoon: [{ name: 'More Saw Forge apps', description: 'New instruments and tools will appear here and install with one click.' }],
     settings: { desktopShortcuts: true, autoUpdate: true, openAtLogin: false }, paths: { projects: 'C:\\Users\\you\\Documents\\Saw Forge', apps: 'C:\\Users\\you\\AppData\\Local\\Saw Forge Hub\\apps' },
     apps: [{ id: 'saw-forge-studio', name: 'Saw Forge Studio', tagline: 'Music production studio', category: 'Music production', version: '1.0.0', size: 415000, installed: null, updateAvailable: false, icon: 'img/studio-icon.png', dataDir: 'Documents\\Saw Forge\\Saw Forge Studio',
-      description: 'Arrange, record and mix with the Saw Forge wavetable synth, Worship Atmospheres pads, virtual EDM drummers, take comping and automation.', notes: 'First desktop release.' }],
+      description: 'Arrange, record and mix with the Saw Forge wavetable synth, Worship Atmospheres pads, virtual EDM drummers, take comping and automation.', notes: 'First desktop release.' },
+      { id: 'worship-pedalboard', name: 'Worship Pedalboard', tagline: 'Guitar pedalboard and amp (preview)', category: 'Guitar effects', version: '0.1.0', size: 98000, installed: null, updateAvailable: false, icon: 'img/pedalboard-icon.png', dataDir: 'Documents\\Saw Forge\\Worship Pedalboard',
+        description: 'Plug in your electric guitar and play through a virtual pedalboard built for worship tones, with amp and cabinet simulation.', notes: 'Preview: the live guitar engine.' }],
   };
   const snap = () => JSON.parse(JSON.stringify(state));
   return {
     state: async () => snap(), refresh: async () => snap(), cancel: async () => {}, reveal: async () => {}, open: async () => {}, hubUpdate: async () => state.hub.update,
     setSetting: async (k, v) => { state.settings[k] = v; return snap(); },
-    launch: async () => toast('In the desktop app this opens Saw Forge Studio in its own window.'),
+    launch: async (id) => toast(`In the desktop app this opens ${(state.apps.find((a) => a.id === id) || {}).name || 'the app'} in its own window.`),
     uninstall: async (id) => { state.apps.find((a) => a.id === id).installed = null; emit('state', snap()); return { ok: true }; },
     install: (id) => new Promise((done) => {
       const a = state.apps.find((x) => x.id === id), total = a.size;

@@ -1,6 +1,6 @@
 {
   "_comment": "Apps the hub offers. pack-apps zips each one into a verified package and writes the catalog.",
-  "hubNotes": "Saw Forge Studio 1.1.1 (beta): a new Folk pianist, chords that follow key and major/minor changes, and a more realistic Session Pianist (half-pedalling, una corda, velocity curves and microphone perspectives). Regions on a track no longer stack on top of each other.",
+  "hubNotes": "New app: Worship Pedalboard (preview). Plug your electric guitar into an audio interface and play through a virtual pedalboard built for worship tones, with a compressor, overdrives, tap-tempo delays, reverbs, and amp and cabinet simulation. Find it under Apps and click Install.",
   "apps": [
     {
       "id": "saw-forge-studio",
@@ -28,6 +28,32 @@
       },
       "dataFolder": "Saw Forge Studio",
       "notes": "Beta: Session Pianist. New: the Folk pianist, with Twinkling Ostinato and Strummed Folk styles, plus a Folk genre and Nostalgic mood in the Chord Composer. Changing the key now moves the chords, and Major/Minor turns them into the new mode's chords (G D Em C becomes Gm D Eb Cm). The piano gains Soft Grand and Una Corda characters, half-pedalling, soft pedal (CC67) and expression pedal (CC11), velocity curves for your MIDI keyboard, microphone perspectives, room size, pedal noise and a Realism control. Fixed: MIDI, Drummer and Pianist regions no longer pile up on top of each other. Moving, pasting or duplicating a region onto another one now trims the one underneath, like other DAWs."
+    },
+    {
+      "id": "worship-pedalboard",
+      "name": "Worship Pedalboard",
+      "version": "0.1.0",
+      "releasedWith": "1.0.6",
+      "tagline": "Guitar pedalboard and amp (preview)",
+      "description": "Plug in your electric guitar through an audio interface and play through a virtual pedalboard built for worship tones: compressor, overdrives, tap-tempo delays, lush reverbs, and amp and cabinet simulation.",
+      "category": "Guitar effects",
+      "root": "../pedalboard",
+      "include": [
+        "index.html",
+        "src",
+        "styles"
+      ],
+      "icon": "assets/apps/worship-pedalboard/icon.png",
+      "iconIco": "assets/apps/worship-pedalboard/icon.ico",
+      "window": {
+        "width": 1480,
+        "height": 920,
+        "minWidth": 1100,
+        "minHeight": 680,
+        "backgroundColor": "#0f1113"
+      },
+      "dataFolder": "Worship Pedalboard",
+      "notes": "Preview: the live guitar engine. Live guitar input with input gain, noise gate, meters and a clip light; Sanctum Comp, Clearwater Drive, Greenlight Drive, Lumen Echo, Dot Eight, Ember Echo, Great Hall and Silver Plate pedals; seven amp characters with synthesised cabinets or your own IR files; tap tempo; stereo output with a limiter and feedback protection; a clearly labelled test signal for trying sounds without a guitar."
     }
   ],
   "comingSoon": [

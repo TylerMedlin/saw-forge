@@ -248,7 +248,7 @@ async function selftest() {
         out.storeNeedsHeader = blocked === 403;
         try {
           const ctx = new OfflineAudioContext({ numberOfChannels: 2, length: 4800, sampleRate: 48000 });
-          await ctx.audioWorklet.addModule('/src/audio/worklet/engine-processor.js');
+          await ctx.audioWorklet.addModule(window.__sawforgeWorklet || '/src/audio/worklet/engine-processor.js');
           out.worklet = true;
         } catch (err) { out.worklet = String(err); }
         return out;

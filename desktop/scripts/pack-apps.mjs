@@ -48,6 +48,8 @@ for (const a of apps) {
     if (!existsSync(p)) throw new Error(`${a.id}: missing ${inc}`);
     if (statSync(p).isDirectory()) walk(p, root, files); else files.push({ name: inc, data: read(p, inc) });
   }
+  // every package carries the licence, even apps that live in their own folder
+  if (!files.some((f) => f.name === 'LICENSE')) files.push({ name: 'LICENSE', data: read(join(DESKTOP, '..', 'LICENSE'), 'LICENSE') });
   const manifest = { id: a.id, name: a.name, version: a.version, tagline: a.tagline, entry: 'index.html', window: a.window, dataFolder: a.dataFolder || a.name, license: 'GPL-3.0-or-later', publisher: cfg.publisher };
   files.push({ name: '.sawforge/app.json', data: Buffer.from(JSON.stringify(manifest, null, 2)) });
   files.push({ name: '.sawforge/icon.png', data: readFileSync(join(DESKTOP, a.icon)) });
